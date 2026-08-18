@@ -1003,6 +1003,52 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       }
     })
 
+    it('a stale live session rejects its flush after another mount resumed and advanced the log', async () => {
+      const fix = await makeFixture()
+      // Two independent contexts over the SAME storage emulate two harness
+      // processes sharing one sessions root: each has its own SessionStore and
+      // coordinator, and the storage medium is the only shared channel.
+      const a = await freshCtx(fix)
+      const b = await freshCtx(fix)
+      try {
+        // Process A hosts the session live and durably completes one turn.
+        const live = a.ctx.sessions.create(SessionId('stale-writer'), { meta: { cwd: WORK } })
+        send(live, oneTurnLog())
+        await a.ctx.sessions.flush(live)
+
+        // Process B resumes the same id and publishes it: the constructor's
+        // session/end-seed marker reaches durable storage, advancing the log
+        // past A's in-memory cursor.
+        const preparation = await b.ctx.sessionPersistence.prepare(SessionId('stale-writer'))
+        b.ctx.effect(function* () {
+          yield b.ctx.sessions.enter(preparation.session)
+          b.ctx.sessions.announce(preparation.session)
+        }, 'stale-writer-resume')
+        await b.ctx.sessions.flush(preparation.session)
+
+        // A's still-live Session never saw the marker: it assigns seqs from its
+        // own log length, duplicating the marker's seq. The flush must reject
+        // loudly instead of interleaving the duplicate into the committed
+        // region, where every later load would refuse the log as corrupt.
+        live.append('turn/start', { turn: 2 })
+        live.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
+        await expect(a.ctx.sessions.flush(live)).rejects.toThrow(/advanced by another writer/)
+
+        // The stored log remains exactly B's, so a later cold load succeeds.
+        const c = await freshCtx(fix)
+        try {
+          const loaded = await c.ctx.sessionPersistence.load(SessionId('stale-writer'))
+          expect(loaded.events.map(e => e.type)).toEqual([...oneTurnLog().map(e => e.type), 'session/end-seed'])
+        } finally {
+          await c.fiber.dispose()
+        }
+      } finally {
+        await a.fiber.dispose()
+        await b.fiber.dispose()
+        await fix.cleanup()
+      }
+    })
+
     it('an abandoned lazy session (never materialized) releases its id for reuse', async () => {
       const fix = await makeFixture()
       const { ctx, fiber } = await freshCtx(fix)

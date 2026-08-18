@@ -183,8 +183,10 @@ class ControlledBackend implements PersistenceBackend<never> {
   appendAttempts = 0
   loadAttempts = 0
   repairAttempts = 0
+  revisionReads = 0
   beforeAppend?: (attempt: number) => Promise<void>
   beforeLoadStored?: (attempt: number, signal?: AbortSignal) => Promise<void>
+  beforeRevision?: (attempt: number) => Promise<void>
   /** When set, the declared seek hook delegates here so readFrom exercises it; unset throws (tests set it first). */
   seekHook?: (id: SessionId, fromSeq: number, signal?: AbortSignal) => Promise<StoredSuffix | undefined>
 
@@ -206,6 +208,8 @@ class ControlledBackend implements PersistenceBackend<never> {
   }
 
   async readStoredRevision(id: SessionId, signal?: AbortSignal): Promise<SessionPersistenceRevision | undefined> {
+    const attempt = ++this.revisionReads
+    await this.beforeRevision?.(attempt)
     signal?.throwIfAborted()
     const entry = this.store.get(id)
     return entry === undefined ? undefined : memoryRevision(entry)
@@ -672,6 +676,45 @@ describe('PersistenceCoordinator session preparations', () => {
       await expect(live.init).rejects.toBe(failure)
     } finally {
       preparation[Symbol.dispose]()
+      await fiber.dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('a failed append surfaces its own rejection even when the baseline revision re-read fails', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const backend = new ControlledBackend()
+    let coordinator!: PersistenceCoordinator<never>
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      coordinator = new PersistenceCoordinator(inner, backend)
+    }, { inject: ['sessions'] }))
+    const m = meta('double-fault-retry')
+    await coordinator.create(m)
+    await coordinator.append(m.id, oneTurnLog())
+    const turn2 = [
+      { type: 'turn/start', seq: 6, time: 9, data: { turn: 2 } },
+      { type: 'turn/end', seq: 7, time: 10, data: { turn: 2, reason: { kind: 'completed' } } },
+    ] as SessionEvent[]
+
+    // The append fails, and the best-effort baseline refresh after it fails
+    // too: the caller still sees the APPEND rejection (not the refresh
+    // failure), and a later retry is not wedged by the stale baseline. The
+    // guard's own pre-append revision read (settledReads + 1) must pass so the
+    // failure lands inside appendBatch, making settledReads + 2 the refresh.
+    const appendFailure = new Error('append boom')
+    backend.beforeAppend = () => Promise.reject(appendFailure)
+    const settledReads = backend.revisionReads
+    backend.beforeRevision = attempt =>
+      attempt === settledReads + 2 ? Promise.reject(new Error('revision boom')) : Promise.resolve()
+    try {
+      await expect(coordinator.append(m.id, turn2)).rejects.toBe(appendFailure)
+      delete backend.beforeAppend
+      delete backend.beforeRevision
+      await coordinator.append(m.id, turn2)
+      const loaded = await coordinator.load(m.id)
+      expect(loaded.events.map(e => e.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+    } finally {
       await fiber.dispose()
       await ctx.fiber.dispose()
     }

@@ -146,6 +146,9 @@ export interface PersistenceBackend<TornMarker = unknown> {
   /**
    * Read the current source-qualified revision for one stored session without
    * loading its event log. Returns `undefined` when the identity is absent.
+   * Besides validating retained preparations, the coordinator compares it
+   * before and after every append so a log advanced by an external writer (a
+   * second harness process sharing the sessions root) rejects loudly.
    * @param id - persisted session id to observe.
    * @param signal - optional cancellation for backend read work.
    */
@@ -179,7 +182,9 @@ export interface PersistenceBackend<TornMarker = unknown> {
    * Durably append a CONTIGUOUS batch, lazily materializing the session first
    * when `!isMaterialized`. The materialize-write and the first event batch MUST
    * commit ATOMICALLY (a crash between them must not leave a materialized-but-
-   * empty session). Returns once the batch is durable.
+   * empty session). Returns once the batch is durable. A rejection must leave
+   * the stored log unchanged (roll partial work back): the coordinator keeps
+   * its cursor across the failure and retries the same batch.
    */
   appendBatch(meta: SessionHeader, events: readonly SessionEvent[], isMaterialized: boolean): Promise<void>
 
@@ -219,6 +224,13 @@ interface SessionState {
   meta: SessionHeader
   /** The next seq the backend expects to append (the stored log length). */
   cursor: number
+  /**
+   * The durable revision at which `cursor` was last confirmed correct,
+   * refreshed after every successful append. Re-checked before each append so
+   * a log advanced by a writer outside this process rejects loudly instead of
+   * interleaving duplicate seqs into the committed region.
+   */
+  revision?: SessionPersistenceRevision
   /**
    * Whether lazy creation has produced a durable artifact. The first append
    * atomically materializes the header with events; reclaim logic uses this to
@@ -701,12 +713,64 @@ export class PersistenceCoordinator<TornMarker = unknown> {
       }
     }
 
-    await this.backend.appendBatch(state.meta, events, state.materialized)
+    // Single-writer guard across processes: the in-memory cursor only says
+    // where THIS coordinator's next write goes, while another harness process
+    // sharing the sessions root may have advanced the durable log since the
+    // cursor was established — classically a second process resuming the id
+    // (persisting its session/end-seed marker) while this process's stale live
+    // Session keeps appending. Interleaving would duplicate seqs inside the
+    // committed region, which every later load rejects as corruption. Refuse
+    // loudly instead. A check-then-write TOCTOU window of one batch remains;
+    // full exclusion would require a cross-process lock.
+    if (state.materialized && state.revision !== undefined) {
+      const current = await this.backend.readStoredRevision(id)
+      if (current !== state.revision) {
+        throw new Error(
+          `session "${id}" log was advanced by another writer (expected revision ${String(state.revision)}, `
+          + `found ${String(current)}): refusing to append — another harness process is sharing this `
+          + 'sessions root; continue the session in the process that owns it, or restart it here',
+        )
+      }
+    }
+
+    let appended = false
+    try {
+      await this.backend.appendBatch(state.meta, events, state.materialized)
+      appended = true
+    } finally {
+      if (!appended && state.revision !== undefined) {
+        // A rejected appendBatch leaves the durable log at its pre-attempt
+        // bytes (the backend rolls partial work back), but the failed attempt
+        // still perturbs revision metadata (e.g. a rollback truncate's mtime).
+        // Re-establish the baseline so the legitimate cursor-preserving RETRY
+        // is not refused above as a foreign write. A foreign append landing
+        // inside the failed attempt remains the accepted TOCTOU window.
+        try {
+          await this.refreshRevision(id, state)
+        } catch {
+          // Best-effort refresh: the original appendBatch failure is the one
+          // callers must see; a stale baseline only makes the next retry
+          // refuse conservatively.
+        }
+      }
+    }
     // The durable write is the transaction: mark materialized + advance the
     // cursor as soon as it commits (uniform across backends).
     state.materialized = true
     state.cursor += events.length
+    await this.refreshRevision(id, state)
     this.preparations.invalidate(id)
+  }
+
+  /**
+   * Re-read one state's durable-revision baseline. An absent stored identity
+   * degrades the append-time guard to its in-memory cursor until the next
+   * confirmed read.
+   */
+  private async refreshRevision(id: SessionId, state: SessionState): Promise<void> {
+    const current = await this.backend.readStoredRevision(id)
+    if (current === undefined) delete state.revision
+    else state.revision = current
   }
 
   /**
@@ -955,6 +1019,8 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     state.meta = source.inspection.meta
     state.cursor = cursor
     state.materialized = true
+    // The freshness check just above pinned the durable log to source.revision.
+    state.revision = source.revision
     this.states.set(id, state)
     return {
       source,
@@ -1312,12 +1378,19 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     }
     // Truncate-only repair (no closers): the open turn is NOT closed here.
     if (tornMarker !== undefined) await this.backend.commitRepair(meta, tornMarker, [])
-    this.states.set(session.header.id, {
+    const state: SessionState = {
       meta: { ...meta },
       cursor: storedEvents.length,
       materialized: true,
       owner: session,
-    })
+      // Without a repair the durable log is exactly what loadStored just read.
+      ...tornMarker === undefined ? { revision: stored.revision } : {},
+    }
+    if (tornMarker !== undefined) {
+      // A repair rewrote the log, so re-read the revision it settled at.
+      await this.refreshRevision(session.header.id, state)
+    }
+    this.states.set(session.header.id, state)
     const suffix = seed.slice(storedEvents.length)
     if (suffix.length > 0) await this.appendCore(session.header.id, suffix)
   }

@@ -781,25 +781,20 @@ describe('SqliteSessionPersistence: edge cases', () => {
     await b1.ctx.sessionPersistence.create(m)
     await b1.ctx.sessionPersistence.append(m.id, oneTurnLog())
 
-    // A SECOND backend over the same file loads the session first, so it adopts
-    // cursor 6 (the committed length) into its OWN in-memory state.
-    const b2 = await backend(path)
-    await b2.ctx.sessionPersistence.load(m.id) // cursor 6 in b2
-    const turn2: SessionEvent[] = [
-      { type: 'turn/start', seq: 6, time: 7, data: { turn: 2 } },
-      { type: 'turn/end', seq: 7, time: 8, data: { turn: 2, reason: { kind: 'completed' } } },
-    ]
-    // b1 commits seq 6..7 first.
-    await b1.ctx.sessionPersistence.append(m.id, turn2)
-    // b2 still thinks its cursor is 6, so this batch passes the contiguity check
-    // but its INSERT of seq 6 hits the UNIQUE (session_id, seq) constraint
-    // mid-transaction → ROLLBACK + rethrow.
-    await expect(b2.ctx.sessionPersistence.append(m.id, turn2)).rejects.toThrow(/UNIQUE/)
-    // b1's turn is intact; b2's rolled-back attempt left nothing extra.
+    // The backend hook in isolation: a batch whose seq duplicates a committed
+    // row hits UNIQUE (session_id, seq) mid-transaction → ROLLBACK + rethrow,
+    // leaving the stored log untouched. Through the public service such a
+    // stale batch is refused earlier by the coordinator's concurrent-writer
+    // guard (covered by the shared coordinator contract).
+    const dup = [
+      { type: 'turn/start', seq: 5, time: 7, data: { turn: 2 } },
+    ] as SessionEvent[]
+    await expect(
+      (b1.ctx.sessionPersistence as SqliteSessionPersistence).appendBatch(m, dup, true),
+    ).rejects.toThrow(/UNIQUE/)
     const loaded = await b1.ctx.sessionPersistence.load(m.id)
-    expect(loaded.events.map(e => e.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+    expect(loaded.events.map(e => e.seq)).toEqual([0, 1, 2, 3, 4, 5])
     await b1.dispose()
-    await b2.dispose()
   })
 
   it('journalMode config reaches the database (default wal, rollback modes selectable)', async () => {
