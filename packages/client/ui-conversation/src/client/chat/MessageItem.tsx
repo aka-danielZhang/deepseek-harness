@@ -177,12 +177,14 @@ function projectUserText(text: string): ReactNode {
 
 /** Right-aligned bubble shared by user and steering rows. */
 function UserStyleBubble({
-  content, imageLoader, actions, pending = false, t,
+  content, imageLoader, actions, note, pending = false, t,
 }: {
   content: readonly unknown[]
   imageLoader: ImageLoader
   /** Optional IconActions (or similar) below the bubble; receives the joined text. */
   actions?: (text: string) => ReactNode
+  /** Optional dim caption inside the stack, below the bubble (delivery note). */
+  note?: ReactNode
   /** Whether this is the Host-authoritative pre-admission steering projection. */
   pending?: boolean
   t: ChatViewSlotProps['t']
@@ -198,6 +200,7 @@ function UserStyleBubble({
           {projectUserText(text)}
           {rest.map((block, i) => <JsonBlock key={i} label={t('message.extraBlock')} payload={block} truncatedLabel={truncated} />)}
         </div>}
+        {note}
       </div>
       {actions?.(text)}
     </div>
@@ -206,13 +209,18 @@ function UserStyleBubble({
 
 /**
  * Render one Host-authoritative pending steering item with the same visual
- * language as its eventual durable transcript node.
- * @param props - Pending message content and conversation translator.
+ * language as its eventual durable transcript node, plus the delivery note
+ * that states when the model will actually see the message. The note rides
+ * the pending projection only: the durable handoff replaces this bubble, so
+ * the caption disappearing is exactly the "now model-visible" moment.
+ * @param props - Pending message content, delivery phase, and translator.
  * @returns the pending steering bubble.
  */
-export function PendingSteeringBubble({ content, loadImage, t }: {
+export function PendingSteeringBubble({ content, loadImage, running, t }: {
   content: readonly unknown[]
   loadImage?: ImageLoader
+  /** Whether the owning turn is running; parked steering gets the honest waiting label. */
+  running: boolean
   t: ChatViewSlotProps['t']
 }): ReactNode {
   const imageLoader = loadImage ?? (() => Promise.reject(new Error(t('image.serviceUnavailable'))))
@@ -221,6 +229,9 @@ export function PendingSteeringBubble({ content, loadImage, t }: {
       content={content}
       imageLoader={imageLoader}
       pending
+      note={<div className={css.pendingNote}>
+        {t(running ? 'chat.steering.received' : 'chat.steering.parked')}
+      </div>}
       t={t}
       actions={text => (
         <MessageIconActions

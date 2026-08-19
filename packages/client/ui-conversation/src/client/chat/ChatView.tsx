@@ -398,12 +398,22 @@ export function ChatView({
           {/* No pending placeholders: questions (ui-user-questions) and approvals
               (ApprovalPanel) both take over the composer, so a flow card would
               double-render the same wait. */}
+          {/* Pending steering renders BEFORE the turn status: an interjection
+              visibly joins the running turn (its delivery note states the
+              next-step-boundary truth) instead of dangling below the activity
+              signal of the pre-interjection content. */}
+          {pendingSteering.map(item => (
+            <PendingSteeringBubble
+              key={item.id}
+              content={item.content}
+              loadImage={loadImage}
+              running={running}
+              t={t}
+            />
+          ))}
           {/* Turn-level loading signal: rides the whole running turn (first-token
               wait, tool execution, streaming) so it never flickers per step. */}
           {running && <TurnStatus startTime={runningTurnStart} t={t} />}
-          {pendingSteering.map(item => (
-            <PendingSteeringBubble key={item.id} content={item.content} loadImage={loadImage} t={t} />
-          ))}
         </div>
         {!atBottom && (
           <div className={css.toBottomSlot}>

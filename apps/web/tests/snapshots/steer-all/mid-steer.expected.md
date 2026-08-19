@@ -20,13 +20,13 @@
   - img
   - img
   - text: Think The user wants me to ask them a checkpoint question first, then continue with whatever they interject. Let me do exactly that.
+- text: "Interjection: include the word BANANA in your final reply. Received · sends to the model after the current step"
+- button "Copy":
+  - img
+- text: "Interjection: include the word ORANGE in your final reply. Received · sends to the model after the current step"
+- button "Copy":
+  - img
 - status: Deep diving...
-- text: "Interjection: include the word BANANA in your final reply."
-- button "Copy":
-  - img
-- text: "Interjection: include the word ORANGE in your final reply."
-- button "Copy":
-  - img
 - textbox "Message the agent"
 - button "Commands":
   - img

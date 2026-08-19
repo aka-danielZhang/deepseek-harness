@@ -28,6 +28,14 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* Pending steering delivery note: the dim state line under the bubble —
+   received now, joins the model at the next step boundary (or next run).
+   Same caption treatment as the turn-status clock. */
+.pendingNote {
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-caption);
+}
+
 .contextRow {
   padding: 2px 0;
 }

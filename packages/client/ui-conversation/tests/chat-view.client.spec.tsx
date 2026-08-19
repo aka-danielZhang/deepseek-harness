@@ -477,8 +477,11 @@ describe('ChatView', () => {
     fireEvent.click(within(pendingBubble as HTMLElement).getByRole('button', { name: '复制' }))
     expect(writeText).toHaveBeenCalledWith('interrupt now')
     expect(within(pendingBubble as HTMLElement).queryByRole('button', { name: '在新对话中分支' })).toBeNull()
-    expect(view.getByRole('status').compareDocumentPosition(view.getByText('interrupt now'))
+    expect(view.getByText('interrupt now').compareDocumentPosition(view.getByRole('status'))
       & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    // Truthful delivery note: received now, model-visible at the next step
+    // boundary. It rides the pending projection only.
+    expect(view.getByText('已接收 · 当前步骤结束后发送给模型')).not.toBeNull()
 
     act(() => {
       h.set({
@@ -495,6 +498,9 @@ describe('ChatView', () => {
     })
     expect(view.getAllByText('interrupt now')).toHaveLength(1)
     expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
+    // The delivery note went with the pending projection: the durable node is
+    // the model-visible record, so no state caption remains.
+    expect(view.queryByText('已接收 · 当前步骤结束后发送给模型')).toBeNull()
     // Only the durable steering bubble: the turn is still running, so its
     // assistant narration owns no footer yet, and a steering bubble never
     // carries a branch action.
@@ -535,6 +541,25 @@ describe('ChatView', () => {
 
     expect(view.getAllByText('same steering')).toHaveLength(2)
     expect(view.container.querySelectorAll('[data-pending-steering]')).toHaveLength(1)
+  })
+
+  it('labels parked steering honestly while no turn is running', () => {
+    const pending = {
+      id: 'steer-occurrence-parked' as never,
+      messageId: 'steer-message-parked' as never,
+      placement: 'steering' as const,
+      content: [{ type: 'text' as const, text: 'parked steering' }],
+      preview: 'parked steering',
+      text: 'parked steering',
+    }
+    const h = makeHarness({ queue: [pending], running: false })
+    const view = render(<h.ChatView {...h.props} />)
+
+    // No running turn means no turn status; the note switches to the
+    // next-run wording instead of promising a step boundary.
+    expect(view.queryByRole('status')).toBeNull()
+    expect(view.getByText('已接收 · 将在智能体下次运行时发送')).not.toBeNull()
+    expect(view.queryByText('已接收 · 当前步骤结束后发送给模型')).toBeNull()
   })
 
   it('animates only the latest unresolved model retry', () => {
