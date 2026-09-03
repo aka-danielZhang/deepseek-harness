@@ -29,7 +29,7 @@ Agent 经常在 `todo_write` 项未完成时就结束回合。工具描述早已
 
 **像 repeat-tool-reminder 那样监听 `tools/post-execute`。** 拒绝：残羹发生在回合结束，而非每次调用；停止边界是「即将带着开放清单结束」唯一可观测的点，且 loop 在那里已支持经 `steer()` 同回合延续。
 
-**读取 `todos` 投影服务。** 拒绝：投影是可选挂载的展示单元；守卫直接读权威会话日志，使其在任何能触发 `agent/turn-stopping` 的组合中工作。
+**读取 `todos` 投影服务。** 拒绝：投影是可选挂载的展示单元；守卫通过 `Session.snapshotEvents()` 直接读权威会话日志，使其在任何能触发 `agent/turn-stopping` 的组合中工作。
 
 ## 后果
 

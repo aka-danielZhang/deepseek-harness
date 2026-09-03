@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-todo-completion-guard",
   "description": "Turn-end todo guard plugin: one advisory steer when a turn closes on an unfinished todo list",
-  "version": "0.1.2-alpha.3",
+  "version": "0.1.2-alpha.5",
   "publishConfig": {
     "access": "public"
   },

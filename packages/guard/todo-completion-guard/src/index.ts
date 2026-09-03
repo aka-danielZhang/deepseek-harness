@@ -88,7 +88,7 @@ export function apply(ctx: Context): void {
 
   ctx.on('agent/turn-stopping', ({ agent, turn }) => {
     if (lastReminded.get(agent) === turn) return
-    const { todos, wallBounded } = inspectTurn(agent.session.events)
+    const { todos, wallBounded } = inspectTurn(agent.session.snapshotEvents())
     // `pending` counts as unfinished too — a forgotten pending item is exactly
     // the residue this guard exists for. A wall-bounded turn is left alone.
     if (todos === null || wallBounded) return
