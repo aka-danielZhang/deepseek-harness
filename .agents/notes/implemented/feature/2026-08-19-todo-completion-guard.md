@@ -29,7 +29,7 @@ The row ships in `packages/bundle/base/cordis.patch.yml` beside `repeat-tool-rem
 
 **Watching `tools/post-execute` like repeat-tool-reminder.** Rejected: the residue happens at turn end, not per call; the stopping boundary is the only point where "about to end with an open list" is observable, and the loop there already supports same-turn continuation via `steer()`.
 
-**Reading the `todos` projection service.** Rejected: the projection is a mounted-optional presentation unit; the guard reads the authoritative session log directly so the composition works wherever `agent/turn-stopping` fires.
+**Reading the `todos` projection service.** Rejected: the projection is a mounted-optional presentation unit; the guard reads the authoritative session log through `Session.snapshotEvents()` so the composition works wherever `agent/turn-stopping` fires.
 
 ## Consequences
 

@@ -44,7 +44,7 @@ function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
 
 /** Every guard-steered user message in the agent's log, flattened to joined text + source for terse assertions. */
 function reminders(agent: Agent): { text: string; source: unknown }[] {
-  return [...agent.session.events]
+  return [...agent.session.snapshotEvents()]
     .filter((e): e is SessionEvent<'user/message'> => e.type === 'user/message' && e.data.source.kind === 'plugin')
     .map(e => ({
       text: e.data.content.map(block => block.type === 'text' ? block.text : '').join('|'),
@@ -54,12 +54,12 @@ function reminders(agent: Agent): { text: string; source: unknown }[] {
 
 /** The reason of the most recent turn/end event. */
 function lastTurnEnd(agent: Agent): unknown {
-  return agent.session.events.findLast(event => event.type === 'turn/end')?.data.reason
+  return agent.session.snapshotEvents().findLast(event => event.type === 'turn/end')?.data.reason
 }
 
 /** The most recent todo/write snapshot. */
 function currentTodos(agent: Agent): unknown {
-  return agent.session.events.findLast(event => event.type === 'todo/write')?.data.todos
+  return agent.session.snapshotEvents().findLast(event => event.type === 'todo/write')?.data.todos
 }
 
 function go(agent: Agent): void {
