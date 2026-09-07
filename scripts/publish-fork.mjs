@@ -9,7 +9,7 @@
  *   --all flag for every @deepseek-ai/* package);
  * - rewrite each package.json into a staging copy: scope @deepseek-ai →
  *   the fork scope, version → <upstream>.zw.<N>, cross-references between
- *   fork packages rewritten to the fork scope + zw version;
+ *   fork dependencies retain import names with npm aliases to the fork;
  * - pack from the staging copy (pnpm pack resolves workspace: protocols
  *   from the real tree, so the staging copy packs against live deps);
  * - publish each tarball to the registry with the given dist-tag.
@@ -25,7 +25,7 @@
 import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve, basename } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const UPSTREAM_SCOPE = '@deepseek-ai'
@@ -84,8 +84,18 @@ function changedPackages(all) {
   return selected
 }
 
-/** Rewrite one package manifest into the staging tree. */
-function rewriteManifest(pkgJson, name, version, versionOf, stagingPath, src, workspaceVersions) {
+/**
+ * Rewrite a manifest without changing the names used by built imports and YAML rows.
+ * @param {string} pkgJson - Source manifest path.
+ * @param {string} name - Original package name.
+ * @param {string} version - Published version of this package.
+ * @param {Map<string, string>} versionOf - Published versions by original package name.
+ * @param {string} stagingPath - Destination manifest path.
+ * @param {string} src - Source package directory.
+ * @param {Map<string, string>} workspaceVersions - Original workspace versions.
+ * @returns {string} Published package name.
+ */
+export function rewriteManifest(pkgJson, name, version, versionOf, stagingPath, src, workspaceVersions) {
   const manifest = JSON.parse(readFileSync(pkgJson, 'utf8'))
   const upstreamVersion = manifest.version
   const renamed = `${FORK_SCOPE}/${name.slice(UPSTREAM_SCOPE.length + 1)}`
@@ -96,9 +106,12 @@ function rewriteManifest(pkgJson, name, version, versionOf, stagingPath, src, wo
     if (deps === undefined) continue
     for (const [dep, spec] of Object.entries(deps)) {
       if (versionOf.has(dep)) {
-        // A fork package: point at the fork scope, concrete zw version.
-        deps[`${FORK_SCOPE}/${dep.slice(UPSTREAM_SCOPE.length + 1)}`] = version
-        delete deps[dep]
+        // Peers require semver, not npm aliases; the host supplies the same
+        // fork instance under its original import name.
+        const targetVersion = versionOf.get(dep)
+        deps[dep] = field === 'peerDependencies'
+          ? targetVersion
+          : `npm:${FORK_SCOPE}/${dep.slice(UPSTREAM_SCOPE.length + 1)}@${targetVersion}`
       } else if (typeof spec === 'string' && spec.startsWith('workspace:')) {
         // Non-fork workspace dep: keep the protocol's range shape against the
         // TARGET package's real published version — vendor-line packages
@@ -152,6 +165,9 @@ async function main() {
     console.error('publish-fork: zw patch number required (e.g. `node scripts/publish-fork.mjs 1`)')
     process.exit(1)
   }
+
+  // Both local and CI publication must preserve the names consumers import.
+  run('pnpm', ['exec', 'vitest', 'run', 'scripts/publish-fork.spec.ts'])
 
   // Upstream base version: every fork package carries it in package.json
   // today (one workspace, one rc line). The zw tag spells the baseline
@@ -225,4 +241,4 @@ async function main() {
   if (!dryRun) rmSync(staging, { recursive: true, force: true })
 }
 
-await main()
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) await main()
