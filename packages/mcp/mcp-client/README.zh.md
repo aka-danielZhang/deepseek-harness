@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-mcp-client` 把外部 MCP（Model Context Protocol）服务器挂载到 harness 上，让它们的工具像原生工具一样可用。每台服务器一条配置项，模型就能调用该服务器的工具——文件系统、GitHub、数据库或记忆服务器——名称稳定，例如 `mcp__github__create_issue`。当模型需要使用外部工具服务器时添加它；默认不启用任何服务器，因此由你开启。主要成本是这些工具定义给每次请求增加的 token，而且缓慢或崩溃的服务器可能延迟启动，或在恢复前让它的工具一直调用失败。只桥接工具能力：MCP resources 与 prompts 不受支持。
+`dsh-mcp-client` 让模型把外部 MCP（Model Context Protocol）服务器的工具当作 harness 原生工具调用。每台服务器配置一条记录，其工具便会以稳定名称出现，例如 `mcp__github__create_issue`。可将它用于文件系统、GitHub、数据库、记忆或其他 MCP 工具服务器；默认不启用任何服务器。工具定义会为每次模型请求增加 token；缓慢或崩溃的服务器可能延迟启动，或让工具调用失败直至恢复。本包只桥接工具；MCP resources 与 prompts 不受支持。
 
 ## 目录
 
@@ -90,7 +90,7 @@ kind: "package-reference"
 |---|---|---|
 | `mcp-client/status` | emit | `serverName`、`status: 'connecting' \| 'connected' \| 'reconnecting' \| 'failed' \| 'disposed'`、`toolCount` |
 
-在每个监督器提交点发布：尝试开始（`connecting`）、连接与初始同步完成（`connected`）、退避已武装（`reconnecting`）、放弃／禁用重连后的丢失／从未关闭的失败世代（`failed`），以及处置（`disposed`）。完成的工具同步也会重发当前状态，因为 `toolCount` 会在状态不变时变化——包括排队的注销跑完后第二次带 `toolCount: 0` 的 `failed`／`disposed`。发出该事件的 fiber 上下文及其每个祖先都通过共享 Cordis 事件总线观察它；`serverName` 用来区分并发实例。监听器失败由发射方收容并记日志，因此观察者缺陷不会打断监督器。仅靠 fiber 生命周期无法代替此事件：在 `failOnStartupError: false` 时，失败的服务器仍会在重连循环里到达 `active` fiber。
+在每个监督器提交点发布：尝试开始（`connecting`）、连接与初始同步完成（`connected`）、退避已武装（`reconnecting`）、放弃／禁用重连后的丢失／从未关闭的失败世代（`failed`），以及处置（`disposed`）。完成的工具同步也会重发当前状态，因为 `toolCount` 会在状态不变时变化——包括排队的注销跑完后第二次带 `toolCount: 0` 的 `failed`／`disposed`。事件通过共享 Cordis 事件总线发布。`serverName` 只在一个注册作用域内唯一；若观察者允许独立 Agent 作用域复用同名实例，就需要自行携带额外身份。监听器按约定同步执行：同步抛错由发射方收容并记日志，异步工作则必须自行处理 rejection。仅靠 fiber 生命周期无法代替此事件：在 `failOnStartupError: false` 时，失败的服务器仍会在重连循环里到达 `active` fiber。
 
 ### 启动、工具更新与重连
 
@@ -128,7 +128,7 @@ kind: "package-reference"
 
 ### 生命周期与同步
 
-`apply` 解析重连策略、在当前注册作用域内预留 `serverName`、启动监督器，并等待初始连接加发现完成。独立 Agent 作用域可以复用相同 namespace，因为其工具与传输彼此隔离；同一作用域内重复会在加载时失败。监督器把所有同步——初始、通知与重连——串行到同一条队列，因此两次同步绝不会交错执行各自的先 dispose 后注册交换。dispose 会取消待执行的重连、关闭活动客户端、等待进行中的尝试与排队同步完全停稳，然后注销当前世代。[自动重连 Agent Note](../../../.agents/notes/implemented/feature/2026-08-06-mcp-client-auto-reconnect.zh.md) 拥有重连决策。
+`apply` 解析重连策略、在当前注册作用域内预留 `serverName`、启动监督器，并等待初始连接加发现完成。独立 Agent 作用域可以复用相同 namespace，因为其工具与传输彼此隔离；同一作用域内重复会在加载时失败。监督器把所有同步——初始、通知与重连——串行到同一条队列，因此两次同步绝不会交错执行各自的先 dispose 后注册交换。dispose 会取消待执行的重连、关闭活动客户端、等待进行中的尝试与排队同步完全停稳，然后注销当前世代。
 
 监督器监听 `notifications/tools/list_changed` 并排队一次重新同步；获取阶段失败时保留上一世代注册，注册冲突则回滚本次尝试的世代。每次中断共享一个尝试预算：连续失败达到 `maxAttempts` 次后工具被注销、重连停止；连接存活超过 `maxDelayMs` 会重置预算。
 
@@ -151,7 +151,6 @@ kind: "package-reference"
 
 - [工具子系统参考](../../../docs/subsystems/tools.zh.md)——接收已桥接工具的 `ToolRuntime` 与 `ctx.tools.register()` 约定。
 - [MCP 客户端插件 Agent Note](../../../.agents/notes/implemented/feature/2026-07-07-mcp-client-plugin.zh.md)——命名不变式、发现与执行设计、备选方案与后果。
-- [MCP 客户端自动重连 Agent Note](../../../.agents/notes/implemented/feature/2026-08-06-mcp-client-auto-reconnect.zh.md)——重连策略、尝试预算与退出开关的依据。
 - [规范工具输出约定 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md)——MCP 结果如何映射进规范工具输出约定。
 - [第三方记忆 MCP 指南](../../../docs/user/guide/mcp-memory.zh.md)——使用本包的三份记忆服务器 overlay。
 - [生成配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-mcp-client)——每个受支持配置字段及其源声明。

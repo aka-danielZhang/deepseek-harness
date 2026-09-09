@@ -18,7 +18,7 @@ MCP 服务器连接的观察者——按服务器列出实时状态的设置界�
 - 放弃、禁用重连后的丢失、世代未正常关闭时发 `failed`；
 - 拆除时发 `disposed`。
 
-一次完成的工具同步会重新发布当前状态，因为 `toolCount` 会在状态不变时变化——包括排队注销执行后携带 `toolCount: 0` 的第二个 `failed`/`disposed`。状态本身由纯函数 `computeMcpClientStatus(facts)` 推导，其判定顺序是有语义负担的（`failed` 先于 `reconnecting`、`connected` 先于在途分支），并按分支有单测。监听器失败由发射方包含并记录日志：观察者缺陷无法干扰 supervisor 的状态机。
+一次完成的工具同步会重新发布当前状态，因为 `toolCount` 会在状态不变时变化——包括排队注销执行后携带 `toolCount: 0` 的第二个 `failed`/`disposed`。状态本身由纯函数 `computeMcpClientStatus(facts)` 推导，其判定顺序是有语义负担的（`failed` 先于 `reconnecting`、`connected` 先于在途分支），并按分支有单测。事件使用共享 Cordis 总线，监听器按约定同步执行：同步抛错由发射方收容并记日志，异步工作必须自行处理 rejection。`serverName` 只在一个注册作用域内唯一，因此复用跨 Agent scope 同名实例的部署需要额外的观察者自有身份。
 
 事件声明与 `McpClientStatus` 联合类型放在 `src/types.ts`（纯类型），并由包根再导出；catalog 把 `mcp-client` 作用域映射到 Tools 子系统页。
 

@@ -37,4 +37,4 @@ A turn that writes a list and replies without closing it gets one extra step car
 
 ## Related
 
-The loop's missing turn budget and the Stop-hook self-limit warning are recorded in `packages/core/agent-loop/README.md`; [repeat-tool-reminder](2026-07-08-repeat-tool-guard.md) owns the shared advisory philosophy on the tool chain.
+The loop's missing turn budget and the Stop-hook self-limit warning are recorded in `packages/core/agent-loop/README.md`; [repeat-tool-reminder](../../archived/feature/2026-07-08-repeat-tool-guard.md) owns the shared advisory philosophy on the tool chain.

@@ -262,14 +262,14 @@ PTC mode's bridge additionally exposes each settled sub-dispatch to the `tools/p
  * copy a listener may reshape. `content` is the RENDERED result projection
  * (what a native `tool/result` would carry) — the program itself received
  * the structured `value` (or just the error message on failure); only the
- * `tool/code-dispatch` event's copy changes.
+ * `tool/ptc-dispatch` event's copy changes.
  */
 interface PtcDispatchLog {
   /** The outer `run_code` execution. */
   readonly exec: ToolExecution
   /** The calling agent (the scope routing key and the spill owner), when the outer call has one. */
   readonly agent?: Agent
-  /** Deterministic sub-call id (`<parent>:code:<n>`). */
+  /** Opaque sub-call id; new calls use `<parent>:ptc:<n>`. */
   readonly subCallId: ToolCallId
   /** The dispatched sub-tool name. */
   readonly name: string
@@ -367,7 +367,7 @@ interface ToolExecutionFailure {
 type ToolExecutionResult = ToolExecutionSuccess | ToolExecutionFailure
 ```
 
-The result carries only the outcome. Call identity remains on the immutable `ToolExecution` that accompanies it through every hook and on the durable `tool/call` / `tool/result` session events, so wrappers cannot create a second, disagreeing identity. The canonical `value` is execution-local: the loop persists only `content`, `error`, and `meta`, while `tool/code-dispatch` stores the sub-call's rendered `content` and `isError` verbatim. Replay reproduces presentation but cannot reconstruct canonical intermediate values.
+The result carries only the outcome. Call identity remains on the immutable `ToolExecution` that accompanies it through every hook and on the durable `tool/call` / `tool/result` session events, so wrappers cannot create a second, disagreeing identity. The canonical `value` is execution-local: the loop persists only `content`, `error`, and `meta`, while `tool/ptc-dispatch` stores the sub-call's rendered `content` and `isError` verbatim. Replay reproduces presentation but cannot reconstruct canonical intermediate values.
 
 On success the registry snapshots and validates the body value, freezes it, and invokes the pure renderer plus the optional top-level-call metadata projector. It separately materializes the durable presentation fields immediately before `tools/result`; an invalid value, renderer/projector failure, or non-JSON presentation becomes a JSON-safe `isError`. The final live observer therefore sees the exact execution-local value beside fields safe for the later durable append.
 
@@ -581,17 +581,18 @@ Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index
 
 #### `mcp-client/status` — emit
 
-One MCP server connection reached a new committed state, or its live tool registration count changed. Emitted only after the supervisor mutated its state, never before. The emitting fiber's context and every ancestor context observe this through the shared event bus; `serverName` disambiguates concurrent instances. Listener failures are contained and logged by the emitter, so an observer defect cannot disrupt the supervisor's own state machine.
+One MCP server connection reached a new committed state, or its live tool registration count changed. Emitted only after the supervisor mutated its state, never before, on the shared Cordis event bus. `serverName` is unique only inside its registration scope; deployments that reuse a name across Agent scopes need an additional observer-owned identity. Listeners are synchronous by contract. A synchronous listener throw is logged and contained by the emitter; async work must contain its own rejection.
 
 ```ts cordis-catalog
 /**
  * One MCP server connection reached a new committed state, or its live
  * tool registration count changed. Emitted only after the supervisor
- * mutated its state, never before. The emitting fiber's context and every
- * ancestor context observe this through the shared event bus; `serverName`
- * disambiguates concurrent instances. Listener failures are contained and
- * logged by the emitter, so an observer defect cannot disrupt the
- * supervisor's own state machine.
+ * mutated its state, never before, on the shared Cordis event bus.
+ * `serverName` is unique only inside its registration scope; deployments
+ * that reuse a name across Agent scopes need an additional observer-owned
+ * identity. Listeners are synchronous by contract. A synchronous listener
+ * throw is logged and contained by the emitter; async work must contain its
+ * own rejection.
  * @param serverName - the configured namespace of the emitting instance.
  * @param status - the connection state at this commit point.
  * @param toolCount - number of tools this server currently has registered on `ctx.tools`.
@@ -703,13 +704,13 @@ Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index
 
 #### `tools/ptc-dispatch-log` — waterfall
 
-Allow a listener to replace content in the DURABLE LOG COPY of one `run_code` sub-dispatch outcome before the bridge appends its `tool/code-dispatch` event. `next()` keeps the content unchanged; a listener may return replacement blocks (e.g. the spill policy's preview + locator for an oversized text result). Only the logged copy is affected — the program already received the complete value, and the model sees neither. A throwing listener is contained: the bridge falls back to logging the original settled content. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent's dispatches.
+Allow a listener to replace content in the DURABLE LOG COPY of one `run_code` sub-dispatch outcome before the bridge appends its `tool/ptc-dispatch` event. `next()` keeps the content unchanged; a listener may return replacement blocks (e.g. the spill policy's preview + locator for an oversized text result). Only the logged copy is affected — the program already received the complete value, and the model sees neither. A throwing listener is contained: the bridge falls back to logging the original settled content. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent's dispatches.
 
 ```ts cordis-catalog
 /**
  * Allow a listener to replace content in the DURABLE LOG COPY of one
  * `run_code` sub-dispatch outcome before the bridge appends its
- * `tool/code-dispatch` event. `next()` keeps the
+ * `tool/ptc-dispatch` event. `next()` keeps the
  * content unchanged; a listener may return replacement blocks (e.g. the
  * spill policy's preview + locator for an oversized text result). Only the
  * logged copy is affected — the program already received the complete

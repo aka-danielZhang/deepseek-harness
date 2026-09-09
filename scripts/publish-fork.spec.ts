@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
-const { rewriteManifest } = await import(new URL('./publish-fork.mjs', import.meta.url).href) as {
+const { resolveDiffBase, rewriteManifest } = await import(new URL('./publish-fork.mjs', import.meta.url).href) as {
+  resolveDiffBase: (upstreamRef: string | undefined, git?: (args: string[]) => string) => string
   rewriteManifest: (
     source: string, name: string, version: string, versions: Map<string, string>,
     output: string, src: string, workspace: Map<string, string>,
@@ -25,6 +26,36 @@ function rewrite(fields: Record<string, unknown>): Record<string, unknown> {
   ]), output, root, new Map([['@deepseek-ai/cordis', '4.0.2']]))
   return JSON.parse(readFileSync(output, 'utf8')) as Record<string, unknown>
 }
+
+describe('fork diff baseline', () => {
+  it('keeps the historical merge-base default for local compatibility', () => {
+    const calls: string[][] = []
+    expect(resolveDiffBase(undefined, (args) => {
+      calls.push(args)
+      return 'default-base\n'
+    })).toBe('default-base')
+    expect(calls).toEqual([['merge-base', 'HEAD', 'upstream/master']])
+  })
+
+  it('resolves an explicit immutable ref and requires it in HEAD ancestry', () => {
+    const calls: string[][] = []
+    expect(resolveDiffBase('dsh-v0.1.5-alpha.1', (args) => {
+      calls.push(args)
+      return args[0] === 'rev-parse' ? '5dda764e\n' : ''
+    })).toBe('5dda764e')
+    expect(calls).toEqual([
+      ['rev-parse', '--verify', 'dsh-v0.1.5-alpha.1^{commit}'],
+      ['merge-base', '--is-ancestor', '5dda764e', 'HEAD'],
+    ])
+  })
+
+  it('rejects an explicit ref that is not merged into HEAD', () => {
+    expect(() => resolveDiffBase('unrelated', (args) => {
+      if (args[0] === 'rev-parse') return 'deadbeef\n'
+      throw new Error('not an ancestor')
+    })).toThrow('upstream ref unrelated (deadbeef) is not an ancestor of HEAD')
+  })
+})
 
 describe('fork package manifests', () => {
   it.each(['dependencies', 'devDependencies', 'optionalDependencies'])('preserves import names in %s', (field) => {

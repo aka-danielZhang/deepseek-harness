@@ -18,7 +18,7 @@ The connection supervisor in `packages/mcp/mcp-client` publishes a Cordis event,
 - `failed` on give-up, on a reconnect-disabled loss, and on a failed generation that never closed;
 - `disposed` on teardown.
 
-A completed tool sync republishes the current status because `toolCount` changes without a status transition — including a second `failed`/`disposed` carrying `toolCount: 0` once the queued unregistration runs. The status itself is derived by a pure function, `computeMcpClientStatus(facts)`, whose evaluation order is load-bearing (`failed` before `reconnecting`, `connected` before the in-flight branches) and is unit-tested per branch. Listener failures are contained and logged by the emitter: an observer defect cannot disrupt the supervisor's state machine.
+A completed tool sync republishes the current status because `toolCount` changes without a status transition — including a second `failed`/`disposed` carrying `toolCount: 0` once the queued unregistration runs. The status itself is derived by a pure function, `computeMcpClientStatus(facts)`, whose evaluation order is load-bearing (`failed` before `reconnecting`, `connected` before the in-flight branches) and is unit-tested per branch. The event uses the shared Cordis bus and its listeners are synchronous by contract: a synchronous throw is contained and logged by the emitter, while async work must contain its own rejection. `serverName` is unique only in one registration scope, so a deployment that reuses a name across Agent scopes needs an additional observer-owned identity.
 
 The event declaration and the `McpClientStatus` union live in `src/types.ts` (types only), re-exported from the package root; the catalog maps the `mcp-client` scope to the Tools subsystem page.
 

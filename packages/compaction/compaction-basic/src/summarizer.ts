@@ -76,11 +76,9 @@ const CHECKPOINT_PREAMBLE =
  * compaction instruction is then the only novel input.
  */
 export interface SummarizationInput {
-  /** The conversation's own system prompt, reused for prefix-cache alignment; absent for a system-less request. */
-  readonly system?: string
   /** The conversation's tool schemas, reused for prefix-cache alignment; absent when the request carried none. */
   readonly tools?: readonly ToolSchema[]
-  /** The shadowed region, in surface order, that precedes the compaction instruction. */
+  /** The derived system head, when present, followed by the shadowed region in surface order. */
   readonly messages: readonly Message[]
 }
 
@@ -154,7 +152,6 @@ export async function summarizeWithLlm(
     provider: target.provider,
     model: target.model,
     messages,
-    ...input.system === undefined ? {} : { system: input.system },
     ...input.tools === undefined ? {} : { tools: [...input.tools] },
     maxTokens: config.maxTokens,
     sessionId: agent.session.id,
@@ -194,8 +191,12 @@ export function frameSummary(summary: readonly ContentBlock[]): ContentBlock[] {
   ]
 }
 
-/** Map a terminal summarization finish to its fail-closed error. */
-function finishError(finish: FinishReason): Error | undefined {
+/**
+ * Map a terminal summarization finish to its fail-closed error.
+ * @param finish - terminal stream finish emitted by the summary request.
+ * @returns the corresponding error, or `undefined` for a complete stop.
+ */
+export function finishError(finish: FinishReason): Error | undefined {
   switch (finish.kind) {
     case 'error':
     case 'aborted': {
@@ -213,8 +214,12 @@ function finishError(finish: FinishReason): Error | undefined {
   }
 }
 
-/** Reject visual output and keep only text before synthesizing a user message. */
-function summaryText(
+/**
+ * Reject visual output and keep only text before synthesizing a user message.
+ * @param blocks - raw content blocks emitted by the summary request.
+ * @returns the text-only blocks safe to persist as a compaction checkpoint.
+ */
+export function summaryText(
   blocks: readonly ContentBlock[],
 ): Array<Extract<ContentBlock, { type: 'text' }>> {
   if (contentHasImage(blocks)) {

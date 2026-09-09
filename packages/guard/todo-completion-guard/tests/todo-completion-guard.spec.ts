@@ -5,9 +5,8 @@ import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
-import * as TodoCompletionGuard from '@deepseek-ai/dsh-todo-completion-guard'
+import * as TodoCompletionGuard from '../src/index.ts'
 import { MockAdapter, maxTokensResponse, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
 /**
@@ -31,7 +30,6 @@ const DONE_TODOS = [
 async function harness(): Promise<Context> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(ToolTodo, { allowParallelInProgress: true })
   await ctx.plugin(TodoCompletionGuard)
@@ -76,7 +74,7 @@ describe('the steering nudge', () => {
       textResponse('all done'),
     ])
     ctx.llm.registerAdapter(['mock'], adapter)
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     go(agent)
     await waitForIdle(ctx, agent)
 
@@ -105,7 +103,7 @@ describe('the steering nudge', () => {
       textResponse('deferring the rest to a later turn'),
     ])
     ctx.llm.registerAdapter(['mock'], adapter)
-    const agent = ctx.agentLoop.create(SessionId('a2'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a2'), { provider: 'mock', model: 'mock' })
     go(agent)
     await waitForIdle(ctx, agent)
 
@@ -124,7 +122,7 @@ describe('exemptions', () => {
       maxTokensResponse('cut off mid-sentence'),
     ])
     ctx.llm.registerAdapter(['mock'], adapter)
-    const agent = ctx.agentLoop.create(SessionId('a3'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a3'), { provider: 'mock', model: 'mock' })
     go(agent)
     await waitForIdle(ctx, agent)
 
@@ -142,7 +140,7 @@ describe('exemptions', () => {
       textResponse('fresh reply without touching the list'),
     ])
     ctx.llm.registerAdapter(['mock'], adapter)
-    const agent = ctx.agentLoop.create(SessionId('a4'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a4'), { provider: 'mock', model: 'mock' })
     go(agent)
     await waitForIdle(ctx, agent)
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'next request' }], source: { kind: 'user' } }))
@@ -160,7 +158,7 @@ describe('exemptions', () => {
       textResponse('done'),
     ])
     ctx.llm.registerAdapter(['mock'], adapter)
-    const agent = ctx.agentLoop.create(SessionId('a5'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a5'), { provider: 'mock', model: 'mock' })
     go(agent)
     await waitForIdle(ctx, agent)
 

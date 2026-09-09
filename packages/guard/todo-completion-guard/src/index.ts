@@ -9,24 +9,10 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, lastAssistantStreamChunk } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-
-/**
- * Standing-plan row. Same fields as `@deepseek-ai/dsh-tool-todo`'s `TodoItem`.
- * Declared here so this overlay does not import the tool plugin's host face.
- */
-interface TodoItem {
-  content: string
-  status: 'pending' | 'in_progress' | 'completed'
-}
-
-declare module '@deepseek-ai/dsh-session/types' {
-  interface SessionEventMap {
-    'todo/write': { todos: TodoItem[] }
-  }
-}
+import type { TodoItem } from '@deepseek-ai/dsh-tool-todo/types'
 
 export const name = 'todo-completion-guard'
 
@@ -52,8 +38,10 @@ function inspectTurn(events: readonly SessionEvent[]): { todos: TodoItem[] | nul
   const turnStart = events.findLastIndex(event => event.type === 'turn/start')
   const scope = events.slice(turnStart + 1)
   const todos = scope.findLast(event => event.type === 'todo/write')?.data.todos ?? null
-  const wallBounded = scope.some(event => event.type === 'assistant/chunk'
-    && event.data.chunk.type === 'finish' && event.data.chunk.reason.kind === 'max-tokens')
+  const wallBounded = scope.some(event => (
+    (event.type === 'assistant/message' || event.type === 'assistant/attempt')
+    && lastAssistantStreamChunk(event.data.stream, 'finish')?.reason.kind === 'max-tokens'
+  ))
   return { todos, wallBounded }
 }
 

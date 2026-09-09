@@ -16,8 +16,8 @@
 
 - **改名换 scope 发布**：`@deepseek-ai` scope 归上游官方所有，fork 无法以原名 publish。fork 修改过的包以 **`@crazx`** scope 发布（`FORK_NPM_SCOPE` 环境变量可覆盖）；下游用 `pnpm.overrides` 的 `npm:@crazx/<pkg>@<ver>` 别名重定向，任意 registry 通用、安装侧零改动。
 - **版本编码 zw 层**：npm 版本用预发布段写 `<上游版本>.zw.<N>`（例 `0.1.0-rc.7.zw.1`）。**不用 build metadata**（`0.1.0-rc.7+zw.1`）——npm 视 build metadata 不参与版本序，同版本无法重发，zw 层一多即堵死。git 标签维持 `v<基线>+zw.<N>` 不变（revision.json 钉 ref 字符串，不受影响）。
-- **改动面即发布面**：发布集由 `git diff upstream/master..master` 的**源码改动包**（`src/`/`lib/` 变更或 `apps/cli`）自动推导——`node scripts/publish-fork.mjs --list`；仅 docs/tests/cordis.patch.yml 变更的包不进发布集。dsh-desktop 仓 `prepare-runtime.mjs` 的 `FORK_MODIFIED` 名单与本节同源。
-- **发布流水线**：`.github/workflows/npm-release.yml`——push tag `v*+zw.*`（或手动 dispatch）→ build → 发布依赖名回归测试 → `scripts/publish-fork.mjs <N>`：staging 重写包自身 scope/版本/repository；依赖键保留源码与配置引用的 `@deepseek-ai/*`，普通依赖以 `npm:@crazx/<pkg>@<版本>` 指向 fork，peer 以原名和对应 fork 的 semver 要求宿主提供同一实例；`workspace:` 按目标包版本收敛，绝不产出 `*`。逐包 pack+publish（`--access public`），并开一个 draft Release 记录。本地同款：`node scripts/publish-fork.mjs <N> [--dry-run]`。凭据走仓库 secret `NPM_TOKEN`。决策见[发布依赖别名](.agents/notes/implemented/bug-fix/2026-09-07-fork-published-import-aliases.md)。
+- **改动面即发布面**：发布集由 `git diff <不可变上游基线>..HEAD` 的**源码改动包**（`src/`/`lib/` 变更或 `apps/cli`）自动推导——例如 `node scripts/publish-fork.mjs --list --upstream-ref dsh-v0.1.5-alpha.1`；显式 ref 必须能解析成 commit 且已在 `HEAD` 祖先链中。未传 `--upstream-ref` 的 `upstream/master` merge-base 只保留给本地兼容检查，不能作为发版证据。仅 docs/tests/cordis.patch.yml 变更的包不进发布集。dsh-desktop 仓 `prepare-runtime.mjs` 的 `FORK_MODIFIED` 名单与本节同源。
+- **发布流水线**：`.github/workflows/npm-release.yml`——push tag `v*+zw.*`（或手动 dispatch）→ build → 发布依赖名回归测试 → `scripts/publish-fork.mjs <N> --base <version> --upstream-ref dsh-v<version>`：`--base` 校验包 manifest 版本，`--upstream-ref` 钉住改动面；staging 重写包自身 scope/版本/repository；依赖键保留源码与配置引用的 `@deepseek-ai/*`，普通依赖以 `npm:@crazx/<pkg>@<版本>` 指向 fork，peer 以原名和对应 fork 的 semver 要求宿主提供同一实例；`workspace:` 按目标包版本收敛，绝不产出 `*`。逐包 pack+publish（`--access public`），并开一个 draft Release 记录。本地同款：`node scripts/publish-fork.mjs <N> --base <version> --upstream-ref dsh-v<version> [--dry-run]`。凭据走仓库 secret `NPM_TOKEN`。决策见[发布依赖别名](.agents/notes/implemented/bug-fix/2026-09-07-fork-published-import-aliases.md)。
 - **下游源码依赖仅限显式调试**：dsh-desktop 仓以专门命令（`pnpm run link:source` / `unlink:source`）切换源码 posture，且不得提交 link: 状态——见该仓 AGENTS.md「npm 依赖纪律」。fork 侧不为下游的源码调试便利做任何让步（不保留 link 入口、不改导出形态）。
 - 上游未修改的包**不重发**：下游直接消费 `@deepseek-ai/*` 官方 registry 版本，fork 只对改动面负责。
 
@@ -56,7 +56,7 @@
 
 ## 上游同步
 
-定期 `git fetch upstream` 并把 `upstream/master` 合入 master；冲突时以保留双方语义为准，fork 本地提交不丢弃。同步后跑受影响包的聚焦测试确认 fork 改动仍然成立。
+定期 `git fetch upstream --tags`，从最新 `origin/master` 的隔离工作树创建适配分支，并把待同步的不可变发布标签（例如 `dsh-v0.1.5-alpha.1`）合入；冲突时先按「上游已覆盖则退役、仅 fork 可提供则最小重移植、可移出树则移插件」分类，不按文件整侧覆盖。同步提交、验证报告和发布包清单都记录标签解析出的完整 commit；发布集只用该标签经 `--upstream-ref` 计算。验证通过后再单独决定是否合回 master，fork 本地提交不得丢弃。
 
 ## 本地启动与日志（web:log）
 
@@ -68,7 +68,7 @@ pnpm dsh web:log --port 0       # 让系统分配端口（可避开临时端口�
 pnpm dsh web:log:tmp            # 日志改放系统临时目录（macOS 定期自动清理，无需手动删）
 ```
 
-实现方式：子命令 spawn 自身 bin 的 `dsh web …` 子进程并把输出 tee 到日志文件，转发 SIGINT/SIGTERM，退出码与子进程一致。日志位置（每次启动一个文件，`web-latest.log` 软链始终指向最新一次）：
+实现方式：子命令 spawn 自身 bin 的 `dsh web …` 子进程并把输出 tee 到日志文件，转发 SIGINT/SIGTERM；正常退出沿用子进程 code，信号退出按 shell 约定返回 `128 + signal`。日志位置（每次启动一个文件，`web-latest.log` 软链在平台允许时指向最新一次；Windows 拒绝建链只告警，不阻断 Web 启动）：
 
 ```
 默认：  ~/.dsh/logs/web-<yyyymmdd-HHMMSS>.log          # 重启后仍在，需手动清理

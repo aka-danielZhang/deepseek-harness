@@ -616,7 +616,7 @@ describe('client bundle activation', () => {
     expect(singleMap.headers).toEqual({
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'public, max-age=31536000, immutable',
-      'content-length': singleMap.body.length,
+      'content-length': String(singleMap.body.length),
     })
     expect(JSON.parse(singleMap.body.toString('utf8'))).toMatchObject({
       version: 3,
@@ -636,6 +636,10 @@ describe('client bundle activation', () => {
     expect(batchScript.status).toBe(200)
     expect(batchScript.headers?.['cache-control']).toBe('public, max-age=31536000, immutable')
     expect(batchScript.body.toString('utf8')).toContain(`//# sourceMappingURL=${mapUrl(batch.url)}`)
+    const shellResponse = service.fetchBundle(new Request(`dsh-app://app${batch.url}`))
+    expect(shellResponse.status).toBe(200)
+    expect(shellResponse.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    expect(await shellResponse.text()).toBe(batchScript.body.toString('utf8'))
     expect((await routeRequest(route, batch.url, 'HEAD')).body).toHaveLength(0)
     expect((await routeRequest(route, batch.url, 'POST')).status).toBe(405)
     const batchMap = await routeRequest(route, mapUrl(batch.url))

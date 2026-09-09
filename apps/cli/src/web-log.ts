@@ -5,13 +5,13 @@
  * The boot runs as a child process re-invoking this very bin (`dsh web …`),
  * so the tee is byte-exact and the logging wrapper never shares a process —
  * or a crash — with the harness. Per launch one `web-<timestamp>.log` file is
- * written, with a `web-latest.log` symlink alongside always naming the newest.
+ * written, with a best-effort `web-latest.log` symlink alongside naming the newest.
  * @module @deepseek-ai/dsh/web-log
  */
 
 import { spawn } from 'node:child_process'
 import { createWriteStream, mkdirSync, rmSync, symlinkSync } from 'node:fs'
-import { homedir, tmpdir } from 'node:os'
+import { homedir, tmpdir, constants as osConstants } from 'node:os'
 import { join } from 'node:path'
 
 /** One logged web boot, as parsed from the launcher command line. */
@@ -48,10 +48,19 @@ export function logStamp(now: Date): string {
     + `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
 }
 
+/** Map Node's close tuple to the conventional shell exit status. */
+export function childCloseExitCode(code: number | null, signal: NodeJS.Signals | null): number {
+  if (code !== null) return code
+  if (signal === null) return 1
+  const signalNumber = osConstants.signals[signal]
+  return signalNumber === undefined ? 1 : 128 + signalNumber
+}
+
 /**
  * Boot `dsh web` as a child of this bin, teeing its combined output to the
- * console and the log file, and exit with the child's code. Never returns:
- * the child's exit (or a spawn failure) ends this process.
+ * console and the log file, and exit with the child's code or conventional
+ * 128-plus-signal status. Never returns: the child's close (or a spawn failure)
+ * ends this process.
  * @param options - the parsed `web:log` invocation: the log-dir variant and
  *   the flags forwarded to `dsh web`.
  */
@@ -59,9 +68,13 @@ export function runWebLog(options: WebLogOptions): void {
   const dir = resolveLogDir(process.env, options.tmp)
   mkdirSync(dir, { recursive: true })
   const log = join(dir, `web-${logStamp(new Date())}.log`)
-  // `ln -sfn`: replace whatever web-latest.log pointed at before this launch.
-  rmSync(join(dir, 'web-latest.log'), { force: true })
-  symlinkSync(log, join(dir, 'web-latest.log'))
+  // Keep the live log usable even when Windows denies symlink creation.
+  try {
+    rmSync(join(dir, 'web-latest.log'), { force: true })
+    symlinkSync(log, join(dir, 'web-latest.log'))
+  } catch (error) {
+    process.stderr.write(`[web-log] could not refresh web-latest.log: ${String(error)}\n`)
+  }
   const stream = createWriteStream(log, { flags: 'a' })
 
   const bin = process.argv[1]
@@ -101,7 +114,7 @@ export function runWebLog(options: WebLogOptions): void {
   })
   // 'close', not 'exit': the stdio streams are drained by then, so the crash
   // tail a logged boot exists to capture cannot be cut off by an early end.
-  child.on('close', (code: number | null) => {
-    finish(code ?? 1)
+  child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+    finish(childCloseExitCode(code, signal))
   })
 }

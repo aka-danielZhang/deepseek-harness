@@ -9,14 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-agent-default-model` 提供部署的默认模型选择——提供方、模型与可选的推理（reasoning）强度——agent 入口在全新会话没有自己的选择时应用它。`dsh --profile headless` 这类直接入口与 Host 支撑的入口读取 `ctx.agentDefaultModel`，而不是各自持有平行默认值，因此一个组合配置项就能控制新 agent 从哪个模型开始。挂载的设置提供方会把用户选择叠加在组合配置项之上，保存的更改在下一次读取时可见。它是单一的进程级默认值：按会话的模型选择仍由入口负责。想要为新建 agent 所用模型设置单一位置时，请选择本包。
-
-- `ctx.agentDefaultModel.currentSelection()` 返回一份分离的 `{ provider, model, reasoningEffort? }` 选择，供新创建的 Agent 使用。
-- `ctx.agentDefaultModel.saveSelection(selection)` 保存完整的用户选择。未挂载设置提供方时，此调用不执行任何操作，组合配置项仍为当前值。
-- `ctx.agentDefaultModel.recallEffort(provider, model)` 返回用户在该路由上最后一次显式选择的推理强度；没有记忆时返回 `undefined`。
-- `ctx.agentDefaultModel.rememberEffort(provider, model, effort?)` 记录——或在 `effort` 为 `undefined` 时清除——该路由的记忆强度。未挂载设置提供方时同样不执行任何操作。
-
-被记忆的强度存放在独立的 `agent-model-efforts` Settings 分节（以提供方／模型为键的条目列表），因此切换默认选择不会覆盖它们。该服务只保存被告知的值；咨询记忆的消费方会对照模型的实时能力校验，因为被记住的等级可能比当初提供它的声明活得更久。
+`dsh-agent-default-model` 在会话未指定模型时，为新创建的 agent 提供共享的默认提供方与模型。使用它可以为所有受支持的 agent 入口统一选择起始模型，其中包括 `dsh --profile headless`。设置可用时，用户可以覆盖已配置的选择（包括推理强度），保存的更改会在后续读取中生效。该默认值作用于整个进程；按会话选择模型仍由创建 agent 的入口负责。
 
 ## 目录
 
@@ -63,6 +56,8 @@ await ctx.agentDefaultModel.saveSelection({ provider, model, reasoningEffort: 'h
 
 未挂载设置提供方时，`saveSelection()` 不执行任何操作，组合配置项仍为当前值。该服务不校验目录成员关系：提供方路由可以服务未在目录中公布的模型；发起模型请求的消费方负责可用性诊断。
 
+`recallEffort(provider, model)` 读取一条路由最后一次显式选择的推理等级。`rememberEffort(provider, model, effort?)` 记录它，或在 `effort` 为 `undefined` 时清除；这些条目位于独立的 `agent-model-efforts` Settings 分节，绝不会覆盖默认选择。消费方在使用召回值前对照模型实时能力进行校验。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -81,12 +76,12 @@ await ctx.agentDefaultModel.saveSelection({ provider, model, reasoningEffort: 'h
 
 | 文件 | 职责 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件入口：`AgentDefaultModelConfig` 服务、设置分节安装、`currentSelection`/`saveSelection` |
+| [`src/index.ts`](src/index.ts) | 插件入口：`AgentDefaultModelConfig` 服务、设置分节安装、默认选择访问与按路由推理等级记忆 |
 | — | 不发布运行时不变式伴生入口；唯一的可变值关系由 settings 校验负责。 |
 
 ### 行为说明
 
-两个公开方法都是对该真源的薄读写：`currentSelection()` 返回全新独立对象，调用方持有它不会别名化服务状态；`saveSelection()` 在存在 `ctx.settings` 时写入完整选择。
+四个公开方法都是对这些真源的薄读写。`currentSelection()` 返回全新独立对象，调用方持有它不会别名化服务状态；`saveSelection()` 在存在 `ctx.settings` 时写入完整默认选择。推理记忆写入会串行执行完整的“读取、计算、替换”过程，因此不同路由的并发选择会同时保留；单次写入失败也不会阻断后续写入。
 
 </details>
 

@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-compaction-basic` 让长时 agent 会话在接近模型上下文上限时仍能正常工作。token 压力上升时，它会自动把对话最旧的部分压缩为摘要，并保持近期部分完整；上下文溢出错误发生后，它会压缩并重试。你也可以通过 `dsh-command-compact` 的 `/compact` 按需压缩，并挂载 `dsh-compaction-tool-result-pruner` 先修剪超大工具输出。压缩的代价是一次额外的模型请求，它读取所选历史并写出摘要；只有摘要文本会被保留。它只压缩派生历史——无法缩减系统提示词、工具或会话前缀，也无法拆分单个不可分单元（例如一次超大工具调用）。
+本包让长时 agent 会话在接近模型上下文上限时仍能正常工作。token 压力上升时，它会把最旧的历史压缩为摘要并保留近期消息；上下文溢出错误发生后，它会压缩并重试。你也可以通过 `/compact` 按需压缩，并选择先修剪超大工具输出。能容纳的输入使用一次额外模型请求；超大输入使用有界层次 map-reduce 调用，并且只保留最终摘要文本。它无法缩减系统提示词、工具或会话前缀，也无法拆分单个不可分单元（例如一次超大工具调用）。
 
 ## 目录
 
@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 你会得到什么
 
-默认设置下你会获得四种行为：会话向模型上下文上限增长时自动压缩；提供方确认上下文溢出错误后的恢复（先压缩再重试该请求）；通过 `/compact` 命令按需压缩；以及——挂载修剪器时——压缩前对超大工具输出的修剪。
+默认设置下你会获得四种行为：会话向模型上下文上限增长时自动压缩；提供方确认上下文溢出错误后的恢复（先压缩再重试该请求）；通过 `/compact` 命令按需压缩；以及——挂载修剪器时——压缩前对超大工具输出的修剪。能放入摘要模型窗口的输入保留复用 cache 的 one-shot 路径；超大输入或提供方拒绝的输入回退到有界时序 map-reduce。
 
 ### 最小可用组合
 
@@ -71,11 +71,11 @@ kind: "package-reference"
 | `maxTokens` | `8192` | 摘要请求的输出上限；可包含推理 token。 |
 | `compactionRetries` | `1` | 压力仍高于阈值时，在首次压缩后进行的额外尝试次数。 |
 | `maxOverflowRetries` | `1` | 已确认上下文窗口溢出后的最大重试次数；`0` 只禁用恢复。 |
-| `chunkInputRatio` | `0.6` | 每个层次阶段输入可用的摘要模型窗口比例；有效范围 `[0.1, 0.9]`。 |
+| `chunkInputRatio` | `0.6` | 每个层次阶段输入可使用的摘要模型窗口比例；有效范围为 `[0.1, 0.9]`。 |
 | `mapMaxTokens` | `4096` | 单次层次 map 调用的提供方生成上限。 |
 | `reduceMaxTokens` | `8192` | 单次层次 reduce 调用的提供方生成上限。 |
-| `maxDepth` | `4` | 递归 reduce 轮次上限；有效范围 `1..8`。 |
-| `replayTools` | `false` | 在层次阶段回放工具 schema。严格提供方可能需要打开此项，但会占用 chunk 输入并降低前缀复用。 |
+| `maxDepth` | `4` | 最大递归 reduce 轮数；有效范围为 `1..8`。 |
+| `replayTools` | `false` | 在层次阶段重放工具 schema。严格提供方可能需要启用它，但它会占用分块输入并降低前缀复用。 |
 | `modelPolicies` | `[]` | 针对个别模型路由的精确 `{ provider, model, ...partialPolicy }` 覆盖。 |
 | `auto` | `true` | 启用自动压缩与溢出恢复；设为 `false` 则仅手动执行。 |
 
@@ -109,18 +109,18 @@ kind: "package-reference"
 
 - **一个测量服务为每个决策定价。** 单例 `ctx.tokenMeter` 会在同一个已消费日志 revision 上测量最新规范已记录 envelope 与当前表层。路由适配器声明请求图片定价时，meter 会将其应用于图片历史。压力、近期尾部保留、范围选择与缩减验证使用同一套路由定价的节点数值；已记录的替换影子价仍使用与路由无关的启发式规则，使纯投影 fold 保持一致。
 - **日志记录的标记对就是事务。** 所有入口点共享一个先记录标记的区域事务：验证范围与活动锁，同步追加 `compaction/start`，准备并等待摘要，重新验证，再追加 `compaction/summary` 与替换，最后恰好进行一次闭合尝试。自动调用与显式范围调用要求数字标识的开放轮次归属与整个表层稳定；`compactNow()` 会预留空闲接纳，使用 `turn: null`，允许所选 span 之外追加仅追加上下文，flush 每次已闭合尝试，并在 `finally` 中释放接纳预留。
-- **摘要复用提供方的热前缀。** 逐字回放上次已路由请求的系统提示词、工具与已遮蔽区域消息，使辅助调用成为会话的真正前缀，因此只有尾随指令与摘要输出未缓存。
+- **摘要保留复用 cache 的快速路径，并约束超大工作。** 能容纳的 one-shot 会逐字回放 surface 节点 0 处 `system/message` 所承载的系统提示词、上次已路由请求的工具与已遮蔽区域消息。层次调用会恰好一次重放同一个固定 system head，同时约束时序 map span 与递归 reduce。
 - **`summarize()` 是唯一的子类钩子。** 基于模板或远程摘要器的子类可以覆盖它，同时压力、保留、被引用的源事件、缩减验证与已遮蔽 token 计量仍由 token meter 负责。
 
 ### 自动触发与溢出恢复
 
-当 `auto: true` 时，串行 `agent/pre-step` listener 会在请求派生前检查压力：它通过 `ctx.tokenMeter` 为最新持久路由请求 envelope 定价，当压力越过路由模型的阈值时，先剪枝，再在保留已定价近期尾部的同时摘要最旧的平衡范围。`agent/request-error` listener 响应提供方确认的 `CONTEXT_WINDOW_EXCEEDED`：它绕过常规阈值与保留策略，尝试一次最大平衡头部缩减，并且只在表层替换 generation 前进后才授权重试。取消全程保持最终决定权。
+当 `auto: true` 时，串行 `agent/pre-step` listener 会在请求派生前检查压力：它通过 `ctx.tokenMeter` 为最新持久路由请求 envelope 定价，当压力越过路由模型的阈值时，先剪枝，再在保留已定价近期尾部的同时摘要最旧的平衡范围。每个选定范围都从第一个不是 `system/message` 的 surface 节点开始，因此位于 surface 节点 0 的系统提示词永不会被遮蔽；由历史内提示词更新追加的后续 `system/message` 是普通历史，范围可以遮蔽它，agent loop 的投影随后会在二者文本不同时用当前提示词替换节点 0（[决策规则](../../core/agent-loop/README.zh.md#understand-the-implementation)）。`agent/request-error` listener 响应提供方确认的 `CONTEXT_WINDOW_EXCEEDED`：它绕过常规阈值与保留策略，尝试一次最大平衡头部缩减，并且只在表层替换 generation 前进后才授权重试。取消全程保持最终决定权。
 
 压力策略从拥有持久路由的适配器解析容量。适配器无法为有效动态路由返回容量时，手动压力路径会抛出目标特定配置错误；自动 listener 会对该精确目标警告一次，并携带完整历史继续。
 
 ### 摘要机制
 
-直接 `ctx.llm.stream()` 调用使用已配置的提供方／模型对与上限，回退到最新已记录请求目标，然后再回退到 `AgentOptions` 对，而不运行仅用于 agent loop 的 `agent/request` 扩展点。该调用逐字回放会话自身的系统提示词、工具与已遮蔽区域消息——包括所选适配器必须解析或明确拒绝的图片引用——并将压缩指令作为最后一条 user 消息追加，从而复用提供方的热前缀 cache，而非使它失效。调用将 `GenerateOptions.purpose` 设为 `compaction`；只有返回文本进入检查点，推理与工具调用都会被排除。图片输出会以 `UNSUPPORTED_CONTENT` 失败，而不是消失。替换 user 消息用 `<compacted-summary>` 标签框定摘要；原始摘要保留在 `compaction/summary` 事件上。
+直接 `ctx.llm.stream()` 调用使用已配置的提供方／模型对与上限，回退到最新已记录请求目标，然后再回退到 `AgentOptions` 对，而不运行仅用于 agent loop 的 `agent/request` 扩展点。完整请求能容纳时，该调用将 surface 节点 0 处派生的 `system/message` 作为 `messages` 的首项回放，后接已遮蔽区域消息（包括位于其 surface 位置的被遮蔽历史内 `system/message`），逐字携带 header 的工具，并将压缩指令作为最后一条 user 消息追加。超大输入或提供方拒绝的输入会被组合成工具配对平衡的时序 map span，再递归 reduce；每个 map 与 reduce 请求都把当前非空 system head 恰好一次作为首条消息重放，后续动态 `system/message` 仍是普通时序 map 输入，绝不会被提升或删除。每阶段预算都包含固定 head、可选工具与指令成本。只有 `replayTools: true` 时，工具 schema 才随层次调用发送。空内容系统头节点不贡献消息，但仍处于压缩范围之外。每次调用都将 `GenerateOptions.purpose` 设为 `compaction`；只有返回文本进入检查点，推理与工具调用都会被排除。图片输出会以 `UNSUPPORTED_CONTENT` 失败，而不是消失。替换 user 消息用 `<compacted-summary>` 标签框定摘要；最终原始摘要保留在 `compaction/summary` 事件上。
 
 ### 区域事务
 
@@ -136,7 +136,10 @@ kind: "package-reference"
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：`BasicCompactionEngine`、自动 listener、入口点分发 |
 | [`src/region.ts`](src/region.ts) | 保留选择与共享的先记录标记压缩事务 |
-| [`src/summarizer.ts`](src/summarizer.ts) | 默认 `ctx.llm.stream()` 摘要、检查点框定、安全摘要投影 |
+| [`src/summarizer.ts`](src/summarizer.ts) | 默认 `ctx.llm.stream()` one-shot 摘要、检查点框定、安全摘要投影 |
+| [`src/hierarchical.ts`](src/hierarchical.ts) | 有界 map-reduce 回退、自适应拆分与阶段用量聚合 |
+| [`src/hierarchical-planner.ts`](src/hierarchical-planner.ts) | 工具配对平衡单元与贪心 token 预算规划 |
+| [`src/hierarchical-prompts.ts`](src/hierarchical-prompts.ts) | 结构化 map/reduce 提示词与输出验证 |
 | [`src/config.ts`](src/config.ts) | 加载时验证与路由模型策略解析 |
 | [`src/types.ts`](src/types.ts) | `BasicCompactionConfig` 与已解析策略词汇 |
 | — | 不发布运行时不变式伴生入口；持久标记对可在会话日志中观察。 |
@@ -186,7 +189,7 @@ This is an automatically generated checkpoint condensing an earlier span of the 
 
 #### 模型看到的内容
 
-摘要模型会接收逐字回放的会话：与上次已路由请求为已遮蔽区域发送的相同系统提示词、工具 schema 与消息，后面跟随一条最终 user 消息，即下方压缩指令。会话模型绝不会看到该私有请求或其推理；只有返回文本会被存储。
+完整请求能容纳时，摘要模型会接收逐字回放的会话：与上次已路由请求为已遮蔽区域发送的相同 system head、工具 schema 与消息，后面跟随一条最终 user 消息，即下方压缩指令。层次模式下，每个 map 请求接收恰好一次相同 system head、一个有序且工具配对平衡的源 span，以及结构化 map 指令；reduce 请求接收恰好一次相同 head、有序 `<partial-summary>` frame 和结构化 reduce 指令。后续 system 更新保留在原始 map 时序中，不会成为第二个固定 head。只有 `replayTools: true` 时，工具 schema 才随层次调用发送。会话模型绝不会看到这些私有请求或其推理；只有最终返回文本会被存储。
 
 ##### 压缩指令（最终 user 消息）
 
@@ -229,11 +232,11 @@ Rules:
 
 #### Token 影响
 
-这是一次独立模型调用：输入是已回放会话前缀加固定指令，输出受 `maxTokens` 限制。收敛重试可能多次支付这项成本。
+能容纳的输入会产生一次独立模型调用：输入是已回放会话前缀加固定指令，输出受 `maxTokens` 限制。层次模式每个 map span 调用一次模型，再进行一次或多次 reduce，分别受 `mapMaxTokens` 与 `reduceMaxTokens` 限制；提供方确认的 overflow 可能在本地二分前增加失败尝试。收敛重试可能多次支付任一种成本。
 
 #### KV Cache 影响
 
-已回放系统提示词、工具与已遮蔽区域消息与会话最后一个已路由请求逐字匹配，因此提供方的热前缀 cache 可复用至尾随指令之前；只有该指令与摘要输出未缓存。将摘要器路由到不同提供方／模型，或压缩非头部范围，都会放弃该复用。
+能容纳的 one-shot 会保留穿过已遮蔽区域的完整热前缀。层次调用会保留固定 system head，以及启用时工具 schema 的前缀复用；map payload 与 reduce frame 会在该共享前缀之后分叉。将摘要器路由到不同提供方／模型会放弃会话路由的 cache 复用。
 
 ## 已知限制与延期工作
 
@@ -244,9 +247,9 @@ Rules:
 
 - **计量准确度取决于固定启发式规则**——可复用提供方用量缺失时，会回退到字符数加结构开销，而非精确的 token 化；只有在适配器声明了请求图片定价的路由上，图片出现处才携带提供方精确的视觉 token。
 - **溢出分类由适配器维护**——提供方措辞可能改变；两个 DeepSeek 适配器将可识别的上下文限制失败规范化为 `CONTEXT_WINDOW_EXCEEDED`。
-- **有界恢复需要摘要模型的容量元数据**——省略 `contextWindow` 的适配器继续走旧的一次性路径。该请求成功则行为不变；若溢出，层次无法推导安全 chunk 预算，并以可操作的容量错误失败。
-- **层次输出是严格的检查点协议**——每个 map 与 reduce 阶段必须返回全部必需标题。截断、视觉输出、结构畸形、耗尽 `maxDepth`，或仍溢出的不可分源／部分摘要，都会让整次压缩事务失败，不安装部分检查点。
 - **部分不可分单元与仅 envelope 溢出仍不在表层压缩范围内**——恢复无法缩减系统／工具／前缀、拆分不可分的非工具节点，或修复不可剪枝剩余部分仍超出窗口的工具单元。可选 pruner 可以缩减原本不可分工具对内的文本型工具结果主体。
+- **层次模式要求声明摘要模型容量**——没有正整数 `contextWindow` 时，能容纳的输入仍可 one-shot 摘要；但 one-shot 被确认 overflow 后会清晰失败，因为有界分块规划没有可信窗口。
+- **层次模式刻意有界**——提供方拒绝不可分的工具配对平衡 span、固定 system／tools／instruction 开销耗尽阶段预算、reduce 轮次未减少 partial 数量，或达到 `maxDepth` 时都会失败，而不会循环。
 - **`compactRegion` 要求存在未结束的轮次**——在完全关闭的会话上手动调用会抛出异常（「no open turn」），而不是执行压缩。
 - **摘要失败会保留最新持久表层**——任何替换前，自动路径会记录警告，并携带完整超预算历史继续。如果剪枝已落地，后续摘要失败会从该持久剪枝表层继续。因达到 `maxTokens` 而发生的摘要截断（隐藏推理 token 可能会耗尽该额度）遵循同一规则。
 

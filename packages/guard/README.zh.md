@@ -9,7 +9,7 @@ kind: "package-group"
 
 ## 概述
 
-`guard/` 组通过监视常见失败模式来保持 agent loop（智能体循环）高效。`repeat-tool-reminder` 会在模型重复完全相同的工具调用时提醒它改变方法或结束任务，让卡住的循环不再浪费时间和 token。`timeout-policy` 为声明了限时的工具调用设置时间上限，让挂起的调用向模型返回清晰的超时错误，而不是拖住整个会话。`todo-completion-guard` 会在一轮即将结束而待办列表仍有未完成项时，发出一次建议性提醒。三者都随 `dsh` base 组合默认启用；组合可以调优或移除它们。
+`guard/` 组监视 agent loop 中常见的失败模式。`repeat-tool-reminder` 会提醒重复相同工具调用却没有进展的模型。`timeout-policy` 让声明了期限的工具以清晰的超时结果结束，而不是拖住会话。`todo-completion-guard` 给正在结束的回合一次核对未完成计划事项的机会。三者都随 `dsh` base 组合默认启用；组合可以调优或移除它们。
 
 ## 目录
 
