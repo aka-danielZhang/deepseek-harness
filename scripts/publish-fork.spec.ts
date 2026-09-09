@@ -58,15 +58,18 @@ describe('fork diff baseline', () => {
 })
 
 describe('fork package manifests', () => {
-  it.each(['dependencies', 'devDependencies', 'optionalDependencies'])('preserves import names in %s', (field) => {
+  it.each(['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'])('preserves import names in %s', (field) => {
     const manifest = rewrite({ [field]: { '@deepseek-ai/dsh-tool-cordis': 'workspace:^' } })
     expect(manifest[field]).toEqual({ '@deepseek-ai/dsh-tool-cordis': 'npm:@crazx/dsh-tool-cordis@0.1.2-rc.1.zw.2' })
     expect(manifest.name).toBe('@crazx/dsh')
   })
 
-  it('keeps peer names with a semver requirement on the host-provided fork instance', () => {
+  it('aliases fork peers so plain consumers can satisfy them from the registry', () => {
+    // A bare zw version under the official @deepseek-ai name exists only as
+    // @crazx, so consumers without a pre-provided peer explode under
+    // auto-install-peers (the zw.1 dsh-agent-default-model incident).
     expect(rewrite({ peerDependencies: { '@deepseek-ai/dsh-tool-cordis': 'workspace:^' } }).peerDependencies)
-      .toEqual({ '@deepseek-ai/dsh-tool-cordis': '0.1.2-rc.1.zw.2' })
+      .toEqual({ '@deepseek-ai/dsh-tool-cordis': 'npm:@crazx/dsh-tool-cordis@0.1.2-rc.1.zw.2' })
   })
 
   it('retains peer metadata under the same package name', () => {

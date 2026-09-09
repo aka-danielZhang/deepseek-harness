@@ -123,12 +123,16 @@ export function rewriteManifest(pkgJson, name, version, versionOf, stagingPath, 
     if (deps === undefined) continue
     for (const [dep, spec] of Object.entries(deps)) {
       if (versionOf.has(dep)) {
-        // Peers require semver, not npm aliases; the host supplies the same
-        // fork instance under its original import name.
+        // Fork-modified deps alias to @crazx in EVERY field, peers included:
+        // npm/pnpm both accept `npm:<pkg>@<version>` peer specs, and the
+        // alias is the only spec that actually resolves — a bare zw version
+        // under the official @deepseek-ai name exists only as @crazx, so
+        // consumers that do not pre-provide the peer explode under
+        // auto-install-peers (the zw.1 dsh-agent-default-model incident:
+        // @crazx/dsh-api-session-controller's peer made plain installs of
+        // bridge-style consumers unsatisfiable).
         const targetVersion = versionOf.get(dep)
-        deps[dep] = field === 'peerDependencies'
-          ? targetVersion
-          : `npm:${FORK_SCOPE}/${dep.slice(UPSTREAM_SCOPE.length + 1)}@${targetVersion}`
+        deps[dep] = `npm:${FORK_SCOPE}/${dep.slice(UPSTREAM_SCOPE.length + 1)}@${targetVersion}`
       } else if (typeof spec === 'string' && spec.startsWith('workspace:')) {
         // Non-fork workspace dep: keep the protocol's range shape against the
         // TARGET package's real published version — vendor-line packages
