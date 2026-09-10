@@ -10,6 +10,7 @@ import {
 } from '@deepseek-ai/dsh-compaction-basic/src/hierarchical-prompts.ts'
 import LlmRuntime, {
   CONTEXT_WINDOW_EXCEEDED_CODE,
+  createSystemMessage,
   createUserMessage,
   LlmAdapter,
 } from '@deepseek-ai/dsh-llm'
@@ -349,8 +350,12 @@ describe('hierarchical compaction fallback', () => {
     }]
     const messages = Array.from({ length: 5 }, () => user('x'.repeat(1200)))
     const omitted = fixture()
-    await omitted.engine.runInput({ messages, tools, system: 'hierarchy system' }, omitted.owner)
+    await omitted.engine.runInput({
+      messages: [createSystemMessage('hierarchy system', 'test'), ...messages],
+      tools,
+    }, omitted.owner)
     expect(omitted.adapter.calls.every(call => call.tools === undefined)).toBe(true)
+    expect(omitted.adapter.calls.every(call => call.messages[0]?.role === 'system')).toBe(true)
 
     const replayed = fixture({ replayTools: true })
     await replayed.engine.runInput({ messages, tools }, replayed.owner)
@@ -438,10 +443,11 @@ describe('hierarchical compaction fallback', () => {
   })
 
   it('fails when fixed hierarchy input leaves no message budget', async () => {
-    const { engine, owner } = fixture()
+    const { engine, owner } = fixture({ replayTools: true })
     const messages = Array.from({ length: 5 }, () => user('x'.repeat(1200)))
-    await expect(engine.runInput({ messages, system: 's'.repeat(5000) }, owner))
-      .rejects.toThrow(/system\/tools\/instruction.*above/)
+    await expect(engine.runInput({
+      messages: [createSystemMessage('s'.repeat(20_000), 'test'), ...messages],
+    }, owner)).rejects.toThrow(/system\/tools\/instruction.*above/)
   })
 
   it('prices the widest source coordinates for multi-digit map spans', async () => {

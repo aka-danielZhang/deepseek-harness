@@ -165,7 +165,9 @@ class HierarchicalSummarizer {
       this.hierarchy.mapMaxTokens,
       'map',
     )
-    const units = toolBalancedUnits(input.messages)
+    const systemMessage = input.messages[0]?.role === 'system' ? input.messages[0] : undefined
+    const sourceMessages = systemMessage === undefined ? input.messages : input.messages.slice(1)
+    const units = toolBalancedUnits(sourceMessages)
     const totalUnits = units.length
     const mapReserve = this.estimateFixedInput(
       input,
@@ -174,7 +176,7 @@ class HierarchicalSummarizer {
       estimate,
     )
     const mapMessageBudget = this.messageBudget(inputBudget, mapReserve, 'map')
-    const chunks = planMessageChunks(input.messages, mapMessageBudget, estimate)
+    const chunks = planMessageChunks(sourceMessages, mapMessageBudget, estimate)
     /* v8 ignore next -- stock range selection never submits an empty shadowed region. */
     if (chunks.length === 0) {
       throw new Error('hierarchical compaction: oversized input produced no map chunks')
@@ -190,7 +192,10 @@ class HierarchicalSummarizer {
       if (span === undefined) break
       try {
         const result = await this.runStage(
-          { ...input, messages: span.messages },
+          {
+            ...input,
+            messages: systemMessage === undefined ? span.messages : [systemMessage, ...span.messages],
+          },
           mapInstruction(span.start, span.end, totalUnits),
           target,
           this.hierarchy.mapMaxTokens,
@@ -269,7 +274,10 @@ class HierarchicalSummarizer {
         if (span === undefined) break
         try {
           const result = await this.runStage(
-            { ...input, messages: span.messages },
+            {
+              ...input,
+              messages: systemMessage === undefined ? span.messages : [systemMessage, ...span.messages],
+            },
             reduceInstruction(round, span.start, span.end, totalUnits),
             target,
             this.hierarchy.reduceMaxTokens,
@@ -449,8 +457,9 @@ class HierarchicalSummarizer {
     includeTools: boolean,
     estimate: (message: Message) => number,
   ): number {
+    const sourceMessages = input.messages[0]?.role === 'system' ? input.messages.slice(1) : input.messages
     return this.estimateFixedInput(input, instruction, includeTools, estimate)
-      + estimateMessages(input.messages, estimate)
+      + estimateMessages(sourceMessages, estimate)
   }
 
   /** Price the repeated header and final instruction for one stage. */
@@ -460,9 +469,7 @@ class HierarchicalSummarizer {
     includeTools: boolean,
     estimate: (message: Message) => number,
   ): number {
-    const systemTokens = input.system === undefined
-      ? 0
-      : Math.ceil(input.system.length / CHARS_PER_TOKEN) + ENVELOPE_OVERHEAD
+    const systemTokens = input.messages[0]?.role === 'system' ? estimate(input.messages[0]) : 0
     const toolsTokens = !includeTools || input.tools === undefined || input.tools.length === 0
       ? 0
       : Math.ceil(JSON.stringify(input.tools).length / CHARS_PER_TOKEN) + ENVELOPE_OVERHEAD
@@ -496,7 +503,6 @@ class HierarchicalSummarizer {
       provider: target.provider,
       model: target.model,
       messages: [...input.messages, this.instructionMessage(instruction)],
-      ...input.system === undefined ? {} : { system: input.system },
       ...this.hierarchy.replayTools && input.tools !== undefined ? { tools: [...input.tools] } : {},
       maxTokens,
       sessionId: agent.session.id,

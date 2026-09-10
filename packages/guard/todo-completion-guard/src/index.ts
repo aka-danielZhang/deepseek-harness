@@ -52,8 +52,10 @@ function inspectTurn(events: readonly SessionEvent[]): { todos: TodoItem[] | nul
   const turnStart = events.findLastIndex(event => event.type === 'turn/start')
   const scope = events.slice(turnStart + 1)
   const todos = scope.findLast(event => event.type === 'todo/write')?.data.todos ?? null
-  const wallBounded = scope.some(event => event.type === 'assistant/chunk'
-    && event.data.chunk.type === 'finish' && event.data.chunk.reason.kind === 'max-tokens')
+  const wallBounded = scope.some(event => (
+    event.type === 'assistant/message' || event.type === 'assistant/attempt'
+  ) && event.data.stream.some(record => record.type === 'chunk'
+    && record.chunk.type === 'finish' && record.chunk.reason.kind === 'max-tokens'))
   return { todos, wallBounded }
 }
 
