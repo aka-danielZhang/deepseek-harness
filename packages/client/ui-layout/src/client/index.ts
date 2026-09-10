@@ -24,7 +24,7 @@ import { ThemePresenter } from './theme-presenter.ts'
 // OwnerShare contracts below are the render-side halves registrants compose
 // against; the frame components and the store factory are package-internal.
 export { LayoutController } from './service.ts'
-export type { ILayout } from './service.ts'
+export type { ILayout, ToolbarHosts } from './service.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -77,6 +77,19 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * current session nothing is mounted here.
      */
     'rightbar': { kind: 'single'; scope: 'session'; owner: RightbarOwnerProps }
+    /**
+     * The unified desktop toolbar row: the frame's first grid row spanning
+     * every column (macOS toolbar look with the native traffic lights inside
+     * its leading inset). OCCUPIED by the desktop bridge's DesktopToolbar,
+     * which renders the portal hosts the session header projects into.
+     *
+     * Session-maybe scope so the occupant receives the standard session
+     * shares (it derives the title/workspace face) while staying mounted
+     * across no-session/session transitions. With no occupant the row is an
+     * empty auto track — zero height — so plain web, Windows, and Linux
+     * layouts are pixel-identical to the single-row frame.
+     */
+    'shell.toolbar': { kind: 'single'; scope: 'session-maybe'; owner: ConvOwnerProps }
     /**
      * Frame-wide floating layer, above every column and outside their scroll
      * containers. Deliberately generic and unowned by any feature: a badge, a
@@ -138,6 +151,7 @@ export function apply(ctx: ClientContext): void {
       name: 'root',
       locale: 'common',
       children: {
+        'shell.toolbar': { kind: 'single', scope: 'session-maybe' },
         'sidebar': { kind: 'single', scope: 'root' },
         'conversation': { kind: 'single', scope: 'session-maybe' },
         'rightbar': { kind: 'single', scope: 'session' },

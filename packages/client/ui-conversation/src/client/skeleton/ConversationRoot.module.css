@@ -59,6 +59,15 @@
   display: none;
 }
 
+/* Portalled into the desktop toolbar: the header owns no box (display
+   contents), so only its View-tabs row takes space in the body and with no
+   tabs the in-body header is exactly zero height — no leftover padding or
+   border seam. The portalled title cluster and corner live in the toolbar's
+   hosts. */
+.headerPortalled {
+  display: contents;
+}
+
 .titleRow {
   display: flex;
   align-items: center;

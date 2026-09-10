@@ -317,6 +317,26 @@ export class ClientSessions implements ISessions {
     this.manager.clearSelection()
   }
 
+  /** Whether the transient selection history has an older entry to go back to. */
+  canBack(): boolean {
+    return this.manager.canBack()
+  }
+
+  /** Whether the transient selection history has a newer entry to go forward to. */
+  canForward(): boolean {
+    return this.manager.canForward()
+  }
+
+  /** Select the previous history entry (prunes unreachable entries on the way). */
+  back(): void {
+    this.manager.back()
+  }
+
+  /** Select the next history entry after a back navigation. */
+  forward(): void {
+    this.manager.forward()
+  }
+
   /**
    * Refresh the real Session baseline, reusing an in-flight pull.
    * @returns completion of the current or newly started baseline pull.

@@ -68,6 +68,18 @@ export interface ISessions {
 
   /** Clear the current selection into the no-session view state. */
   clear(): void
+  /** Whether the transient selection history has an older entry to go back to. */
+  canBack(): boolean
+  /** Whether the transient selection history has a newer entry to go forward to. */
+  canForward(): boolean
+  /**
+   * Select the previous history entry (bounded, consecutive repeats
+   * collapsed, forward truncated by a fresh selection, removed sessions
+   * pruned). The cleared no-session state participates as an entry.
+   */
+  back(): void
+  /** Select the next history entry after a back navigation. */
+  forward(): void
   /**
    * Refresh the Host-authoritative Session list.
    * @returns completion of the current or newly started Session-list refresh.

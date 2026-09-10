@@ -1,13 +1,41 @@
 .frame {
   position: relative; /* anchors the drag handles, which straddle column borders */
   display: grid;
-  grid-template-rows: 100%;
+  /* Two rows: the unified toolbar's auto track (zero height with no
+     occupant) above the one remaining track, which the three columns fill
+     exactly as the pre-toolbar single-row frame did. */
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
   overflow: hidden;
   background: var(--dsw-alias-bg-base);
   /* Collapse/expand animates the tracks on the deepsuite sider curve
      (--ds-ease-in-out / --ds-transition-duration-slow, ui-theme base.css). */
   transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+/* The toolbar row spans all columns of the first row; the three columns pin
+   to the second row explicitly so auto-placement can never shuffle them. */
+.toolbarRow {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sidebarCol {
+  grid-row: 2;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--dsw-specific-sidebar-fill);
+  border-right: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+.centerCol {
+  grid-row: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Dragging writes widths at pointer cadence; easing them would detach the
@@ -20,20 +48,6 @@
   .frame {
     transition: none;
   }
-}
-
-.sidebarCol {
-  min-width: 0;
-  overflow: hidden;
-  background: var(--dsw-specific-sidebar-fill);
-  border-right: 0.5px solid var(--dsw-alias-border-l3);
-}
-
-.centerCol {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
 }
 
 /* Drag handles are frame children (columns clip overflow): an 8px hit strip
@@ -83,6 +97,7 @@
  */
 .rightbarCol {
   position: relative;
+  grid-row: 2;
   min-width: 0;
   overflow: visible;
 }

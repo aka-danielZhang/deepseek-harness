@@ -479,6 +479,19 @@ export class TestSessions implements ISessions {
     })
   }
 
+  /** History stubs: the test runtime has no selection history — both bounds report empty. */
+  canBack(): boolean {
+    return false
+  }
+
+  canForward(): boolean {
+    return false
+  }
+
+  back(): void {}
+
+  forward(): void {}
+
   /** Record a list refresh; fixture callers publish list state explicitly. */
   refresh(): Promise<void> {
     this.calls.push({ method: 'refresh', args: [] })

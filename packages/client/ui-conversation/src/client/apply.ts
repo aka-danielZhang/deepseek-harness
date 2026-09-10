@@ -29,6 +29,7 @@ import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
+import { setToolbarHosts } from './skeleton/toolbar-hosts.ts'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { resolveActiveView } from './view-selection.ts'
@@ -120,6 +121,17 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   const uiConversation = new UiConversation(ctx, sessions)
 
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-conversation: dictionaries')
+  // Desktop toolbar portal hosts (ui-layout): optional dependency — without a
+  // toolbar the session header renders in place. The subscription mirrors the
+  // registry into this package's browser-local store, which the header reads
+  // through useSyncExternalStore.
+  const layout = ctx.get('layout')
+  if (layout !== undefined) {
+    ctx.effect(() => {
+      setToolbarHosts(layout.getToolbarHosts())
+      return layout.onToolbarHosts(setToolbarHosts)
+    }, 'ui-conversation: toolbar portal hosts')
+  }
   const t = ctx.locale.bind(NS)
   const conversationStore = createConversationStore()
   const submissionPolicy = new ComposerSubmissionPolicy(

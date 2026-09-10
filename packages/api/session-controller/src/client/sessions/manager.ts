@@ -24,6 +24,7 @@ import type {} from '@deepseek-ai/dsh-session-title/client'
 import { Notifier } from './notifier.ts'
 import { ProjectionValueStore } from './projection-store.ts'
 import { Session } from './session.ts'
+import { SelectionHistory, type SelectionEntry } from './selection-history.ts'
 import type { SessionRemotes } from './remotes.ts'
 
 function sessionSeqCursor(value: number): SessionSeqCursor {
@@ -135,6 +136,11 @@ export class SessionManager {
 
   private selected: SessionId | undefined
 
+  /** Toolbar back/forward history over selections (session, addressed child, or clear). */
+  private readonly selectionHistory = new SelectionHistory()
+  /** While replaying a history entry, the selections it makes must not re-record. */
+  private navigatingHistory = false
+
   private listSnapshotCache: SessionListSnapshot
   /** Entry-identity cache (reference stability): list rebuilds reuse the previous entry
    *  object when every field matches — wire refreshes mint all-new summary objects, so identity
@@ -156,6 +162,11 @@ export class SessionManager {
   ) {
     this.selected = restoredSelection
     if (restoredAddress !== undefined) this.addresses.set(restoredAddress.childSessionId, restoredAddress)
+    // The restored selection seeds the history so back/forward always has a
+    // home position; a cold start without one records the cleared state.
+    this.selectionHistory.record(restoredSelection === undefined
+      ? {}
+      : { sessionId: restoredSelection, ...(restoredAddress !== undefined ? { address: restoredAddress } : {}) })
     this.listSnapshotCache = this.buildListSnapshot()
   }
 
@@ -180,6 +191,7 @@ export class SessionManager {
     this.selected = sessionId
     // Looking at the session consumes its completion reminder (dot clears).
     this.completedNotifications.delete(sessionId)
+    if (!this.navigatingHistory) this.selectionHistory.record(address === undefined ? { sessionId } : { sessionId, address })
     void this.refreshSubagents(sessionId)
     this.notifier.notifyNow()
   }
@@ -198,6 +210,7 @@ export class SessionManager {
     this.sessions.get(address.childSessionId)?.configureSubagent(address, catalog?.parentAvailable)
     this.selected = address.childSessionId
     this.completedNotifications.delete(address.childSessionId)
+    if (!this.navigatingHistory) this.selectionHistory.record({ sessionId: address.childSessionId, address })
     void this.refreshSubagents(address.childSessionId)
     this.notifier.notifyNow()
   }
@@ -205,7 +218,67 @@ export class SessionManager {
   /** Clear the selection (the layout falls to the no-session view state). */
   clearSelection(): void {
     this.selected = undefined
+    if (!this.navigatingHistory) this.selectionHistory.record({})
     this.notifier.notifyNow()
+  }
+
+  // ---- Selection history (toolbar back/forward) ----
+
+  /** Whether an older selection exists to go back to. */
+  canBack(): boolean {
+    return this.selectionHistory.canBack()
+  }
+
+  /** Whether a newer selection exists to go forward to. */
+  canForward(): boolean {
+    return this.selectionHistory.canForward()
+  }
+
+  /**
+   * Select the previous history entry. Unreachable entries (sessions removed
+   * before their prune landed) are pruned and the walk continues to older
+   * entries; the walk stops silently at the oldest bound.
+   */
+  back(): void {
+    while (this.selectionHistory.canBack()) {
+      const entry = this.selectionHistory.back()
+      if (entry === undefined) return
+      if (!this.canReplay(entry)) {
+        if (entry.sessionId !== undefined) this.selectionHistory.prune(entry.sessionId)
+        continue
+      }
+      this.replaySelection(entry)
+      return
+    }
+  }
+
+  /**
+   * Select the next history entry after a back navigation; silently a
+   * no-op at the newest bound.
+   */
+  forward(): void {
+    const entry = this.selectionHistory.forward()
+    if (entry === undefined) return
+    if (this.canReplay(entry)) this.replaySelection(entry)
+    else if (entry.sessionId !== undefined) this.selectionHistory.prune(entry.sessionId)
+  }
+
+  /** Whether a history entry names a session that is still listed or addressed. */
+  private canReplay(entry: SelectionEntry): boolean {
+    if (entry.sessionId === undefined) return true
+    return this.summaries.some(summary => summary.sessionId === entry.sessionId)
+      || this.addresses.has(entry.sessionId)
+  }
+
+  /** Replay one entry without recording it back into the history. */
+  private replaySelection(entry: SelectionEntry): void {
+    this.navigatingHistory = true
+    try {
+      if (entry.sessionId === undefined) this.clearSelection()
+      else this.select(entry.sessionId)
+    } finally {
+      this.navigatingHistory = false
+    }
   }
 
   /**
@@ -476,6 +549,7 @@ export class SessionManager {
           let summaries = baseline
           for (const mutation of mutations) {
             summaries = applyMutation(summaries, mutation)
+            if (mutation.kind === 'remove') this.selectionHistory.prune(mutation.sessionId)
             this.summaries = summaries
             this.syncCompletedNotifications()
           }
@@ -628,6 +702,8 @@ export class SessionManager {
   private recordMutation(mutation: SessionListMutation): void {
     this.listMutations?.push(mutation)
     this.summaries = applyMutation(this.summaries, mutation)
+    // A removal forgets the session's toolbar back/forward history entries.
+    if (mutation.kind === 'remove') this.selectionHistory.prune(mutation.sessionId)
     // Eager edge reconciliation — a snapshot-build-time pass would miss consecutive status frames.
     this.syncCompletedNotifications()
     this.notifier.markDirty()
