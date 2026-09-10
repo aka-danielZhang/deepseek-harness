@@ -11,6 +11,7 @@ import { SettingsScopeController } from '@deepseek-ai/dsh-client-ui-settings/src
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
+const useToolbarHosts: GlobalStandardProps['useToolbarHosts'] = selector => selector(null)
 
 /** Stateless schema service for scope construction in this jsdom fixture. */
 const schemaService = new SettingsSchemaService(new Context())
@@ -95,6 +96,7 @@ function mount(
     useSessions: unusedHook,
     useSessionPendingInteraction,
     usePanelInfo, useResource,
+    useToolbarHosts,
     useWorkspaces: unusedHook,
     controller,
     useWelcome: bindSnapshotSelector(controller.store),

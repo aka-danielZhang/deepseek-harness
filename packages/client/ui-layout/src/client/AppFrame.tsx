@@ -27,7 +27,7 @@ import css from './AppFrame.module.css'
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.overlay'>
+  & PropsRenderSlots<'shell.toolbar' | 'sidebar' | 'main' | 'rightbar' | 'shell.overlay'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & PropsLocale<'common'>
 
@@ -218,6 +218,13 @@ export function AppFrame({
         useSessions={useSessions}
         usePanelInfo={usePanelInfo}
       />
+      {/* Unified toolbar row: spans every column of the FIRST grid row. An
+          empty occupant seat keeps the auto track at zero height, so the
+          plain single-row layout is untouched; the desktop bridge's toolbar
+          mounts here and hosts the session header portal targets. */}
+      <div className={css.toolbarRow} data-shell-toolbar-row="">
+        {renderSlot('shell.toolbar', {})}
+      </div>
       <div className={css.sidebarCol}>
         {sidebar}
       </div>

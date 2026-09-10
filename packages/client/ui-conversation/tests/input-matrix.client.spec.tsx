@@ -49,6 +49,7 @@ function mountBar(shell: SessionInputShell, over?: { running?: boolean; disabled
   })
   const props: InputBarProps = {
     usePanelInfo: selector => selector({ activePanelId: null }),
+    useToolbarHosts: selector => selector(null),
     sessionId: SID,
     SessionProvider: ({ children }) => children,
     useSession: bindSnapshotSelector(session),

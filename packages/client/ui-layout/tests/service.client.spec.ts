@@ -101,4 +101,38 @@ describe('LayoutController', () => {
     expect(pending.aborted).toBe(true)
     service.dispose()
   })
+
+  it('publishes toolbar hosts and notifies subscribers of every transition', () => {
+    const service = new LayoutController(fakePanels(), () => true)
+    const seen: (object | null)[] = []
+    const dispose = service.onToolbarHosts((hosts) => { seen.push(hosts) })
+
+    const hosts = { centerHost: {} as HTMLElement, sessionEndHost: {} as HTMLElement }
+    service.setToolbarHosts(hosts)
+    expect(service.getToolbarHosts()).toBe(hosts)
+    const replacement = { centerHost: {} as HTMLElement, sessionEndHost: {} as HTMLElement }
+    service.setToolbarHosts(replacement)
+    service.releaseToolbarHosts(hosts)
+    expect(service.getToolbarHosts()).toBe(replacement)
+    service.releaseToolbarHosts(replacement)
+    expect(service.getToolbarHosts()).toBeNull()
+    expect(seen).toEqual([hosts, replacement, null])
+
+    dispose()
+    service.setToolbarHosts(hosts)
+    expect(seen).toEqual([hosts, replacement, null])
+  })
+
+  it('retracts its toolbar registration on disposal so the header falls back in place', () => {
+    const service = new LayoutController(fakePanels(), () => true)
+    const seen: (object | null)[] = []
+    service.onToolbarHosts((hosts) => { seen.push(hosts) })
+    const hosts = { centerHost: {} as HTMLElement, sessionEndHost: {} as HTMLElement }
+    service.setToolbarHosts(hosts)
+
+    service.dispose()
+
+    expect(service.getToolbarHosts()).toBeNull()
+    expect(seen).toEqual([hosts, null])
+  })
 })

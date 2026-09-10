@@ -36,6 +36,7 @@ function mount(mode: 'normal' | 'compact' = 'compact', dictionary: typeof en | t
   const setTranscriptView = vi.fn((next: 'normal' | 'compact') => { source.set(next) })
   const props: TranscriptViewRowProps = {
     usePanelInfo: selector => selector({ activePanelId: null }),
+    useToolbarHosts: selector => selector(null),
     useSessions: emptySessions(),
     useSessionPendingInteraction: noPendingInteraction(),
     useWorkspaces: emptyWorkspaces(),

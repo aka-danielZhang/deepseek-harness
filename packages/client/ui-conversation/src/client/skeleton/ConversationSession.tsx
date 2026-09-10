@@ -1,6 +1,7 @@
 /** Strict per-session header/body content inserted into the resident conversation layout. */
 
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -53,11 +54,17 @@ function equalBreadcrumbs(left: readonly Breadcrumb[], right: readonly Breadcrum
 
 /**
  * Renders Session header chrome above the resident conversation scrollport.
+ * When the desktop bridge's unified toolbar is mounted, the title cluster
+ * (breadcrumbs + actions) and the utilities row portal into the toolbar's
+ * `centerHost` and the rightbar corner into its `sessionEndHost`: the header
+ * itself collapses to `display: contents`, keeping only the View-tabs row in
+ * the body — zero height when there are no tabs. Host absence (plain web, or
+ * the bridge unmounted mid-session) renders the original in-place header.
  * @param props - Strict Session store, view ledger, navigation, render, and locale shares.
  * @returns the hidden blank-session header or visible title and tabs.
  */
 export function ConversationSessionHeader({
-  sessionId, useSession, useSessions, useConversation, useConversationViews, useStore,
+  sessionId, useSession, useSessions, useConversation, useConversationViews, useToolbarHosts, useStore,
   renderSlot, open, selectView, t,
 }: ConversationSessionHeaderProps) {
   const tabs = useConversationViews(value => value)
@@ -67,6 +74,100 @@ export function ConversationSessionHeader({
   const session = useSession(s => s)
   const conversation = useConversation(s => s)
   const hideChrome = session.blank && conversationPhase(session, conversation) === 'blank'
+  const hosts = useToolbarHosts(hosts => hosts)
+
+  const tabsRow = tabs.length > 1 && (
+    <div className={css.tabs} role="tablist">
+      {tabs.map(viewTab => (
+        <button
+          key={viewTab.id}
+          type="button"
+          role="tab"
+          aria-selected={viewTab.id === active?.id}
+          className={clsx(css.tab, viewTab.id === active?.id && css.tabActive)}
+          onClick={() => { selectView(viewTab.id) }}
+        >
+          {viewTab.label}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (hosts !== null && !hideChrome) {
+    return (
+      <header className={clsx(css.header, css.headerPortalled)}>
+        {createPortal(
+          <>
+            <div className={css.titleCluster}>
+              <nav className={css.crumbs} aria-label={t('session.hierarchy')}>
+                {ancestry.map((summary, index) => {
+                  const last = index === ancestry.length - 1
+                  const title = (
+                    <button
+                      type="button"
+                      className={clsx(
+                        css.crumb,
+                        summary.subagent && css.crumbSubagent,
+                        last && css.crumbCurrent,
+                      )}
+                      disabled={last}
+                      onClick={() => { open(summary.id) }}
+                    >
+                      {summary.displayTitle}
+                    </button>
+                  )
+                  const lineage = last || summary.subagent
+                  const lineageOwner = {
+                    lineageSessionId: summary.id,
+                    displayTitle: summary.displayTitle,
+                    ...last ? {} : { openTitle: () => { open(summary.id) } },
+                  }
+                  return (
+                    <span key={summary.id} className={css.crumbSeg}>
+                      {index > 0 && <span className={css.crumbSep}>/</span>}
+                      {lineage
+                        ? summary.subagent
+                          ? renderSlot(
+                            'conversation.session.header.lineage',
+                            lineageOwner,
+                            { fallback: title },
+                          )
+                          : (
+                            <>
+                              {title}
+                              {renderSlot(
+                                'conversation.session.header.lineage',
+                                lineageOwner,
+                                { fallback: null },
+                              )}
+                            </>
+                          )
+                        : title}
+                    </span>
+                  )
+                })}
+                {ancestry.length === 0 && <span className={css.crumbCurrent}>{sessionId}</span>}
+              </nav>
+              <div className={css.headerActions}>
+                {renderSlot('conversation.session.header.actions', {})}
+              </div>
+            </div>
+            <div className={css.headerUtilities}>
+              {renderSlot('conversation.session.header.utilities', {})}
+            </div>
+          </>,
+          hosts.centerHost,
+        )}
+        {createPortal(
+          <div className={css.headerCorner} data-conversation-header-corner="">
+            {renderSlot('conversation.session.header.corner', {})}
+          </div>,
+          hosts.sessionEndHost,
+        )}
+        {tabsRow}
+      </header>
+    )
+  }
 
   return (
     <header
@@ -137,22 +238,7 @@ export function ConversationSessionHeader({
               {renderSlot('conversation.session.header.corner', {})}
             </div>
           </div>
-          {tabs.length > 1 && (
-            <div className={css.tabs} role="tablist">
-              {tabs.map(viewTab => (
-                <button
-                  key={viewTab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={viewTab.id === active?.id}
-                  className={clsx(css.tab, viewTab.id === active?.id && css.tabActive)}
-                  onClick={() => { selectView(viewTab.id) }}
-                >
-                  {viewTab.label}
-                </button>
-              ))}
-            </div>
-          )}
+          {tabsRow}
         </>
       )}
     </header>

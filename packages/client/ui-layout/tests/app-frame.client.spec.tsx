@@ -98,6 +98,7 @@ function mountFrame(windowWidth = frameWidth) {
       renderSlot={renderSlot}
       useSessions={useSessions}
       usePanelInfo={usePanelInfo}
+      useToolbarHosts={selector => selector(null)}
       useSessionPendingInteraction={useSessionPendingInteraction}
       useResource={useResource}
       useWorkspaces={sel => sel(workspaceState)}
@@ -195,6 +196,21 @@ describe('AppFrame', () => {
     selectedSession = undefined
     rerenderFrame()
     expect(document.title).toBe('Product')
+  })
+
+  it('renders the unified toolbar row above the columns and dispatches its seat', () => {
+    const { frame, getByTestId, slotCalls } = mountFrame()
+    const row = frame.querySelector<HTMLElement>('[data-shell-toolbar-row]')
+    expect(row).toBeTruthy()
+    // The toolbar row is the frame's first grid row and spans every column;
+    // its occupant seat is mounted even while empty (zero-height auto track).
+    expect(frame.firstElementChild).toBe(row)
+    expect(getByTestId('shell.toolbar-content')).toBeTruthy()
+    expect(slotCalls.find(c => c.key === 'shell.toolbar')).toEqual({
+      key: 'shell.toolbar',
+      props: {},
+      options: undefined,
+    })
   })
 
   it('renders owner props for the default sidebar and prospective right panel', () => {

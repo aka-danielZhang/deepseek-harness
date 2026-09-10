@@ -126,6 +126,8 @@ function mount(
     composerBlock?: { reason: string }
     /** Mutable view ledger used by registration-order regressions. */
     viewTabs?: ViewTab[]
+    /** Toolbar portal hosts a mounted desktop toolbar published (null = none). */
+    toolbarHosts?: { centerHost: HTMLElement; sessionEndHost: HTMLElement } | null
   } = {},
 ) {
   const root = sid('root')
@@ -175,6 +177,8 @@ function mount(
     { id: 'trajectory', label: 'Trajectory' },
   ]
   const useConversationViews: SessionSlotProps['useConversationViews'] = selector => selector(viewTabs)
+  const toolbarHosts = createSnapshotStore(options.toolbarHosts ?? null)
+  const useToolbarHosts = bindSnapshotSelector(toolbarHosts)
   /** Owner share handed to the two composer tool-row seats, per render. */
   const seatOwners: { key: string; owner: unknown }[] = []
   let pickerOwner: unknown
@@ -196,6 +200,7 @@ function mount(
           useSession={useSession}
           useConversation={useConversation}
           useConversationViews={useConversationViews}
+          useToolbarHosts={useToolbarHosts}
           useChat={useChat}
           useTrajectory={useTrajectory}
           useSessions={props.useSessions}
@@ -227,6 +232,7 @@ function mount(
           useTrajectory={useTrajectory}
           useSessions={props.useSessions}
           usePanelInfo={props.usePanelInfo}
+          useToolbarHosts={selector => selector(null)}
           useResource={useResource}
           useSessionPendingInteraction={useSessionPendingInteraction}
           useWorkspaces={props.useWorkspaces}
@@ -254,6 +260,7 @@ function mount(
           useConversation={useConversation}
           useSessions={props.useSessions}
           usePanelInfo={props.usePanelInfo}
+          useToolbarHosts={selector => selector(null)}
           useSessionPendingInteraction={useSessionPendingInteraction}
           useWorkspaces={props.useWorkspaces}
           useProjection={(() => undefined)}
@@ -299,6 +306,7 @@ function mount(
   )) as ConversationRootProps['renderSlotChain']
   const props: ConversationRootProps = {
     usePanelInfo: selector => selector({ activePanelId: null }),
+    useToolbarHosts: selector => selector(null),
     sessionId: SID,
     SessionProvider: ({ children }) => children,
     useSession,
@@ -319,6 +327,7 @@ function mount(
   const view = render(<ConversationRoot {...props} />)
   return {
     view, store, wiring, sink, retargetWorkspace, session, conversation, slotCalls, lineageOwners, seatOwners, open,
+    toolbarHosts,
     pickerOwner: () => pickerOwner,
     rerender: () => { view.rerender(<ConversationRoot {...props} />) },
   }
@@ -339,6 +348,52 @@ describe('Hero chrome', () => {
     expect(brandMarkOwner.size).toBe(34)
     expect(brandMarkOwner.className).toBeTypeOf('string')
     expect(renderSlot.mock.calls[0]?.[2]?.fallback).toBeTruthy()
+  })
+})
+
+describe('Desktop toolbar portal', () => {
+  /** Detached host pair standing in for the bridge toolbar's portal targets. */
+  function hostPair(): { centerHost: HTMLElement; sessionEndHost: HTMLElement } {
+    return { centerHost: document.createElement('div'), sessionEndHost: document.createElement('div') }
+  }
+
+  it('portals the title cluster and corner into the hosts, keeping the tabs row in place', () => {
+    const hosts = hostPair()
+    const b = mount(sessionSnapshotOf(), undefined, undefined, { toolbarHosts: hosts })
+    // The breadcrumbs nav and its actions live in the toolbar's center host.
+    expect(hosts.centerHost.querySelectorAll('nav button').length).toBeGreaterThan(0)
+    expect(hosts.centerHost.querySelector('nav button')?.textContent).toBe('Child')
+    // The rightbar corner portals into the trailing host.
+    expect(hosts.sessionEndHost.querySelector('[data-conversation-header-corner]')).toBeTruthy()
+    // The in-body header keeps only the View-tabs row: no in-place nav, and
+    // the tablist still renders beside the scrollport.
+    expect(b.view.container.querySelector('nav')).toBeNull()
+    expect(b.view.container.querySelector('[role="tablist"]')).toBeTruthy()
+    expect(b.view.container.querySelector('[data-conversation-header-corner]')).toBeNull()
+  })
+
+  it('returns to the in-place header when the toolbar releases its hosts', () => {
+    const hosts = hostPair()
+    const b = mount(sessionSnapshotOf(), undefined, undefined, { toolbarHosts: hosts })
+    expect(hosts.centerHost.querySelector('nav')).toBeTruthy()
+
+    act(() => { b.toolbarHosts.set(null) })
+
+    expect(hosts.centerHost.querySelector('nav')).toBeNull()
+    expect(hosts.sessionEndHost.querySelector('[data-conversation-header-corner]')).toBeNull()
+    expect(b.view.container.querySelector('nav')).toBeTruthy()
+    expect(b.view.container.querySelector('[data-conversation-header-corner]')).toBeTruthy()
+  })
+
+  it('keeps a blank-session header hidden in place even with hosts mounted', () => {
+    const hosts = hostPair()
+    const b = mount(sessionSnapshotOf({ blank: true }), [], undefined, {
+      summaryBlank: true,
+      toolbarHosts: hosts,
+    })
+    // The hidden chrome stays the strict in-place header; nothing portals.
+    expect(hosts.centerHost.querySelector('nav')).toBeNull()
+    expect(b.view.container.querySelector('header[aria-hidden="true"]')).toBeTruthy()
   })
 })
 

@@ -74,12 +74,14 @@ const INPUT_STATE: InputState = { draft: '', attachmentIds: [], draftRev: 0, pha
 
 const t: QueueDockProps['t'] = makeTranslate(zh, commonZh)
 const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
+const useToolbarHosts: GlobalStandardProps['useToolbarHosts'] = selector => selector(null)
 
 function kitFor(snapshot: SessionSnapshot, injected: Partial<QueueDockInjected> = {}) {
   return {
     sessionId: SID,
     t,
     usePanelInfo,
+    useToolbarHosts,
     useSessions: (() => { throw new Error('unused') }) as unknown as SnapshotSelectorHook<SessionListState>,
     useResource,
     useSessionPendingInteraction: bindSnapshotSelector(

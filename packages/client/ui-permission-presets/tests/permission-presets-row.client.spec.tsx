@@ -14,6 +14,7 @@ import { PermissionPresetSettingsController } from '../src/client/settings-store
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
+const useToolbarHosts: GlobalStandardProps['useToolbarHosts'] = selector => selector(null)
 
 const schema = new SettingsSchemaService(new Context())
 
@@ -62,6 +63,7 @@ const runtime = {
   useSessions: (() => { throw new Error('unused') }) as never,
   useSessionPendingInteraction,
   usePanelInfo, useResource,
+  useToolbarHosts,
   useWorkspaces: (() => { throw new Error('unused') }) as never,
 }
 

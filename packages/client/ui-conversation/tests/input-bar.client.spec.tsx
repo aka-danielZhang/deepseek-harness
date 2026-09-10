@@ -165,6 +165,7 @@ function bench(over?: BenchOptions) {
   }) as never
   const props: InputBarProps = {
     usePanelInfo: selector => selector({ activePanelId: null }),
+    useToolbarHosts: selector => selector(null),
     sessionId: SID,
     SessionProvider: ({ children }) => children,
     useSession: bindSnapshotSelector(session),

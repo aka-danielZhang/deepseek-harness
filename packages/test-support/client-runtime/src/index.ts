@@ -30,7 +30,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { PanelInfo } from '@deepseek-ai/dsh-client-ui-layout/client'
+import type { PanelInfo, ToolbarHosts } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {
   ChildrenDecl, ComposedProps, HostObservable, OwnerOf, RenderOpts, SlotComponent, SlotMap, SlotRenderer,
   SlotRendererHost, SnapshotSelectorHook, StoreInstanceLike,
@@ -222,6 +222,8 @@ export class SlotTestRuntime {
   readonly workspaces: TestWorkspaces
   /** Test-owned panel selection used by the framework's usePanelInfo hook. */
   readonly panelInfo = createSnapshotStore<PanelInfo>({ activePanelId: null })
+  /** Test-owned toolbar portal hosts used by the framework's useToolbarHosts hook (null = no toolbar). */
+  readonly toolbarHosts = createSnapshotStore<ToolbarHosts | null>(null)
   /** Mutable file-upload stub; replace `upload` in suites that exercise the capability. */
   readonly fileUpload: TestFileUpload
 
@@ -239,6 +241,7 @@ export class SlotTestRuntime {
   private autoRootView: RenderResult | undefined
   private readonly disposeWorkspaceSource: () => void
   private readonly disposePanelInfoSource: () => void
+  private readonly disposeToolbarHostsSource: () => void
 
   private constructor(ctx: Context, slots: SlotRegistry) {
     this.ctx = ctx
@@ -255,6 +258,7 @@ export class SlotTestRuntime {
     ctx.provide('fileUpload', this.fileUpload as never)
     this.disposeWorkspaceSource = slots.provideRoot({ hooks: { workspaces: this.workspaces.list } })
     this.disposePanelInfoSource = slots.provideRoot({ hooks: { panelInfo: this.panelInfo } })
+    this.disposeToolbarHostsSource = slots.provideRoot({ hooks: { toolbarHosts: this.toolbarHosts } })
     // Capturing install: the production renderer does the rendering; the
     // wrapper only takes the host face for storeOf (no machinery copied).
     const renderer = createSlotRenderer()
@@ -319,6 +323,7 @@ export class SlotTestRuntime {
   /** Release the default panel hook before mounting the production Layout owner. */
   releasePanelInfoSource(): void {
     this.disposePanelInfoSource()
+    this.disposeToolbarHostsSource()
   }
 
   /**
@@ -436,6 +441,7 @@ export class SlotTestRuntime {
     this.root.release()
     this.disposeWorkspaceSource()
     this.disposePanelInfoSource()
+    this.disposeToolbarHostsSource()
     await this.sessions.disposeScopes()
     localStorage.clear()
   }

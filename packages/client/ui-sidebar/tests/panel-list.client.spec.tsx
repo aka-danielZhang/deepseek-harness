@@ -42,6 +42,10 @@ async function bench(collapsed = false) {
     selectPanel: vi.fn((activePanelId: MainPanelId | null) => { runtime.panelInfo.set({ activePanelId }) }),
     openRightbar: vi.fn(),
     closeRightbar: vi.fn(),
+    setToolbarHosts: vi.fn(),
+    releaseToolbarHosts: vi.fn(),
+    getToolbarHosts: () => null,
+    onToolbarHosts: () => () => {},
   } satisfies ILayout
   await runtime.mount({
     inject: ['slots'],

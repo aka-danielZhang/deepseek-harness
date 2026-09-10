@@ -20,6 +20,7 @@ import { zh } from '../src/client/locales.ts'
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
+const useToolbarHosts: GlobalStandardProps['useToolbarHosts'] = selector => selector(null)
 
 afterEach(cleanup)
 const scrollIntoView = vi.fn()
@@ -80,7 +81,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     expandSidebar: vi.fn(),
     useSessions: hook(sessionState([])),
     useSessionPendingInteraction: hook(noPendingInteraction),
-    usePanelInfo, useResource,
+    usePanelInfo, useToolbarHosts, useResource,
     useWorkspaces: hook(workspaceState([])),
     useStore: bindSnapshotSelector(store),
     actions: store.actions,
@@ -117,6 +118,7 @@ describe('WorkspaceBrowser', () => {
     const panelInfo = { activePanelId: 'panel-a' as MainPanelId }
     const b = mount({
       usePanelInfo: hook(panelInfo),
+      useToolbarHosts: selector => selector(null),
       useSessions: hook(sessionState([summary('current', 1)], { current: sid('current') })),
       useWorkspaces: hook(workspaceState([workspace('alpha', ['current'])])),
     })
