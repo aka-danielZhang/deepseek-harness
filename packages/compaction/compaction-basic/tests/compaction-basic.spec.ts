@@ -7,6 +7,7 @@ import { selectCompactableRange } from '@deepseek-ai/dsh-compaction-basic/src/re
 import { frameSummary } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
 import type { SummarizationInput, SummaryResult } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
 import { CompactionId, toolPairingBalancedAfter, toolPairingBalancedBefore } from '@deepseek-ai/dsh-compaction'
+import { SUMMARY_SECTIONS } from '@deepseek-ai/dsh-compaction-basic/src/hierarchical-prompts.ts'
 import {
   resolveCompactSpec,
   resolveConfig,
@@ -974,6 +975,95 @@ describe('compaction region transaction', () => {
 
     const { input } = compact.calls[0]!
     expect(input).toEqual({ messages: prefix, tools })
+  })
+
+  it('runs the bounded hierarchical fallback inside the region transaction when the one-shot call overflows', async () => {
+    const HIERARCHY_PROVIDER = 'hierarchy-integration'
+    const SYSTEM_TEXT = 'INTEGRATION SYSTEM'
+    const structuredOutput = () => SUMMARY_SECTIONS.map(section => `## ${section}\n- retained`).join('\n\n')
+    /** Real adapter: overflow the one-shot attempt (no hierarchy instruction), succeed every map/reduce stage. */
+    class RegionHierarchyAdapter extends LlmAdapter {
+      readonly calls: GenerateOptions[] = []
+      override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return Promise.resolve({ provider, id: model, name: model, context: { contextWindow: 1600 } })
+      }
+
+      override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        this.calls.push(options)
+        const instructionBlock = options.messages.at(-1)?.content.find(
+          (block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text',
+        )
+        const instruction = instructionBlock?.text ?? ''
+        if (!instruction.includes('source units')) {
+          yield {
+            type: 'finish',
+            reason: { kind: 'error', failure: { code: CONTEXT_WINDOW_EXCEEDED_CODE, message: 'one-shot too large' } },
+          }
+          return
+        }
+        const text = structuredOutput()
+        yield { type: 'block-start', index: 0, blockType: 'text' }
+        yield { type: 'block-end', index: 0, block: { type: 'text', text } }
+        yield { type: 'usage', usage: { inputTokens: 20, outputTokens: 5 } }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      }
+    }
+
+    const ctx = createContext()
+    const adapter = new RegionHierarchyAdapter()
+    ctx.llm.registerAdapter([HIERARCHY_PROVIDER], adapter)
+    const compact = new BasicCompactionEngine(ctx, {
+      auto: false,
+      summarizationProvider: HIERARCHY_PROVIDER,
+      summarizationModel: MODEL,
+      chunkInputRatio: 0.5,
+      maxTokens: 256,
+      mapMaxTokens: 128,
+      reduceMaxTokens: 256,
+      maxDepth: 3,
+    })
+    const session = conversation(6, 'fixture '.repeat(40).trim(), SYSTEM_TEXT)
+    const nodes = [...session.surface.nodes]
+    const result = await compact.compactRegion(nodes[1]!, nodes[8]!, agent(session, MODEL), SIGNAL)
+
+    // The one-shot attempt overflowed, then map and reduce stages ran; every
+    // auxiliary request replays the derived system head as its first message.
+    const instructions = adapter.calls.map((call) => {
+      const block = call.messages.at(-1)?.content.find(
+        (candidate): candidate is Extract<ContentBlock, { type: 'text' }> => candidate.type === 'text',
+      )
+      return block?.text ?? ''
+    })
+    expect(instructions.some(instruction => !instruction.includes('source units'))).toBe(true)
+    expect(instructions.filter(instruction => instruction.includes('source units') && !instruction.includes('reduce round')).length)
+      .toBeGreaterThanOrEqual(2)
+    expect(instructions.some(instruction => instruction.includes('reduce round'))).toBe(true)
+    expect(adapter.calls.length).toBe(instructions.length)
+    for (const call of adapter.calls) {
+      expect(call.messages[0]).toMatchObject({ role: 'system' })
+    }
+
+    // The durable transaction records start, framed summary, and end around
+    // the replaced range, and the system head survives outside it.
+    const events = session.snapshotEvents()
+    const start = events.find(event => event.type === 'compaction/start')
+    const summary = events.findLast(event => event.type === 'compaction/summary')
+    const end = events.findLast(event => event.type === 'compaction/end')
+    expect(start && summary && end).toBeTruthy()
+    expect(start!.seq).toBeLessThan(summary!.seq)
+    expect(summary!.seq).toBeLessThan(end!.seq)
+    expect(summary!.data).toMatchObject({
+      shadowedSeqs: result.shadowedSeqs,
+      provider: HIERARCHY_PROVIDER,
+      model: MODEL,
+    })
+    expect(result.shadowedSeqs).not.toContain(nodes[0])
+    const derived = session.deriveMessages()
+    expect(derived[0]).toMatchObject({ role: 'system' })
+    expect((derived[1]!.content[0] as Extract<ContentBlock, { type: 'text' }>).text).toContain('<compacted-summary>')
+
+    const replay = Session.create(SessionId('replay'), session.snapshotEvents())
+    expect(replay.deriveMessages()).toEqual(derived)
   })
 
   it('omits the summarizer system prompt for an empty system head or a system-less surface', async () => {
