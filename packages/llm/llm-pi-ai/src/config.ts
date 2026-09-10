@@ -18,7 +18,7 @@ import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
-import { resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
+import { attributionHeaders, resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
 import type { ResolvedRetryPolicy, RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
 import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 import {
@@ -149,6 +149,16 @@ export interface PiAiProviderProfile {
   defaultInput?: PiAiModality[]
   /** Provider request headers, validated against Fetch when the profile resolves; Harness attribution wins reserved names. */
   headers?: Record<string, string>
+  /**
+   * Session-affinity header names this route sends on every request whose
+   * call carries a session id; each declared name is written with the
+   * session id as its value (gateways like OpenCode Go route and cache by
+   * it). Only explicitly declared names are written — an unset field sends
+   * nothing, so unrelated providers never learn the session id. Names are
+   * validated against Fetch at resolution and the attribution reserved set
+   * (`user-agent`) is refused.
+   */
+  sessionAffinityHeaders?: string[]
   /** Provider-neutral pi-ai reasoning level. */
   reasoning?: ModelThinkingLevel
   /** Token budgets used by reasoning providers that support them. */
@@ -331,6 +341,7 @@ const profile = z.object({
   defaultMaxTokens: z.number().step(1).min(1).default(DEFAULT_MAX_TOKENS),
   defaultInput: z.array(z.union(MODALITIES)).default([...DEFAULT_INPUT]),
   headers: z.dict(z.string()),
+  sessionAffinityHeaders: z.array(z.string()),
   reasoning: z.union(THINKING_LEVELS),
   thinkingBudgets,
   cacheRetention: z.union(['none', 'short', 'long']),
@@ -396,6 +407,33 @@ function assertValidHeaders(provider: string, headers: Readonly<Record<string, s
 }
 
 /**
+ * Reject a session-affinity header name that Fetch cannot send or that
+ * collides with the attribution reserved set: the affinity value is the
+ * session id, while `user-agent` carries the mandatory Harness attribution.
+ * The reserved set reads from {@link attributionHeaders} so the two checks
+ * cannot drift apart.
+ */
+function assertValidSessionAffinityHeaders(provider: string, names: readonly string[] | undefined): void {
+  const reserved = new Set(Object.keys(attributionHeaders()).map(name => name.toLowerCase()))
+  for (const name of names ?? []) {
+    try {
+      new Headers([[name, 'x']])
+    } catch {
+      throw new Error(
+        `llm-pi-ai: provider "${provider}" sessionAffinityHeaders entry "${name}" is not valid for Fetch;`
+        + ' use a valid HTTP field name',
+      )
+    }
+    if (reserved.has(name.toLowerCase())) {
+      throw new Error(
+        `llm-pi-ai: provider "${provider}" sessionAffinityHeaders entry "${name}" is reserved`
+        + ' for Harness attribution and cannot carry the session id',
+      )
+    }
+  }
+}
+
+/**
  * Resolve scalar defaults and materialize each route's serviceable models.
  * Deferred catalog validation retains diagnostics without deleting configured
  * routes. An omitted dict resolves to the empty, dormant route set.
@@ -422,6 +460,7 @@ export function resolveProfiles(
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
     assertValidHeaders(provider, source.headers)
+    assertValidSessionAffinityHeaders(provider, source.sessionAffinityHeaders)
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0
@@ -495,6 +534,7 @@ export function resolveProfiles(
       requestImageMaxBytes,
       retryPolicy: resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`),
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
+      ...rest.sessionAffinityHeaders === undefined ? {} : { sessionAffinityHeaders: [...rest.sessionAffinityHeaders] },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog?.configuredMaxTokens ?? new Map(),
       modelErrors: catalog?.modelErrors ?? new Map(),

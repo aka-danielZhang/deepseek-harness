@@ -123,6 +123,52 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.headers[0]?.['user-agent']).toBe(userAgent())
   })
 
+  it('writes declared session-affinity headers with the session id', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url, {
+      sessionAffinityHeaders: ['x-opencode-session', 'x-client-request-id'],
+    })
+    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [], sessionId: 'session-affinity-1' as never })
+    expect(server.headers[0]?.['x-opencode-session']).toBe('session-affinity-1')
+    expect(server.headers[0]?.['x-client-request-id']).toBe('session-affinity-1')
+    expect(server.headers[0]?.['user-agent']).toBe(userAgent())
+  })
+
+  it('sends session-affinity headers on the OpenAI Responses path too', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        openai: {
+          apiKeyEnv: 'PI_TEST_KEY',
+          baseURL: `${server.url}/v1`,
+          sessionAffinityHeaders: ['x-opencode-session'],
+        },
+      },
+    })
+    await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [], sessionId: 'session-affinity-2' as never })
+    expect(server.paths).toEqual(['/v1/responses'])
+    expect(server.headers[0]?.['x-opencode-session']).toBe('session-affinity-2')
+  })
+
+  it('sends no session-affinity headers when the profile does not declare them', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url, {})
+    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [], sessionId: 'session-affinity-3' as never })
+    expect(server.headers[0]?.['x-opencode-session']).toBeUndefined()
+    expect(server.headers[0]?.['x-client-request-id']).toBeUndefined()
+  })
+
+  it('sends no session-affinity headers when the call carries no session id', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url, {
+      sessionAffinityHeaders: ['x-opencode-session'],
+    })
+    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
+    expect(server.headers[0]?.['x-opencode-session']).toBeUndefined()
+  })
+
   it('forwards common stream options and profile reasoning', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url, {

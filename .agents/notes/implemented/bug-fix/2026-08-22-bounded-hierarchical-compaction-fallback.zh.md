@@ -8,7 +8,7 @@ Status: implemented
 
 默认压缩后端会选择一个有界会话区域，但随后用一次辅助请求摘要整个区域。因此，一段历史可能已经超过会话模型的压力阈值，同时仍大于摘要模型自身的上下文窗口。Provider 返回 `CONTEXT_WINDOW_EXCEEDED`，自动 listener 记录失败后继续，不会落下检查点，而下一次请求会再次携带同一段超大历史。安装一个出树 hierarchy Provider 并不能修正默认行为，因为 shipped 和 user preset 仍在各自隔离的 compaction realm 中挂载 `@deepseek-ai/dsh-compaction-basic`。
 
-现有的[前缀 cache 决策](2026-07-21-compaction-summary-prefix-cache-reuse.zh.md)对于能够装入的请求仍然有价值。把每次摘要都替换成 map-reduce 虽然能修复溢出，却会不必要地增加调用、削弱热前缀复用，并改变既有 one-shot 请求契约。
+现有的[前缀 cache 决策](../../archived/bug-fix/2026-07-21-compaction-summary-prefix-cache-reuse.md)对于能够装入的请求仍然有价值。把每次摘要都替换成 map-reduce 虽然能修复溢出，却会不必要地增加调用、削弱热前缀复用，并改变既有 one-shot 请求契约。
 
 ## Decision
 

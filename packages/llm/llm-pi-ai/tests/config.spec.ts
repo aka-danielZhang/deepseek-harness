@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { assertServiceable, Config, resolveProfiles } from '../src/config.ts'
+import type { PiAiProviderProfile } from '../src/config.ts'
 
 /** Validate one hand-declared route, with the caller's fields layered onto it. */
 const routeWith = (profile: Record<string, unknown>): (() => unknown) =>
@@ -105,5 +106,50 @@ describe('request image policy bounds', () => {
     expect(() => {
       assertServiceable(programmatic)
     }).toThrow(message)
+  })
+})
+
+
+describe('sessionAffinityHeaders profile field', () => {
+  const route = (profile: Record<string, unknown>): Record<string, PiAiProviderProfile> => ({
+    gateway: {
+      api: 'openai-completions',
+      baseURL: 'https://acme.test',
+      models: [{ id: 'm' }],
+      ...profile,
+    } as unknown as PiAiProviderProfile,
+  })
+
+  it('accepts valid Fetch header names and copies the list', () => {
+    const source: PiAiProviderProfile = {
+      api: 'openai-completions',
+      baseURL: 'https://acme.test',
+      models: [{ id: 'm' }],
+      sessionAffinityHeaders: ['x-opencode-session', 'x-client-request-id'],
+    }
+    const resolved = resolveProfiles({ gateway: source })
+    const profile = resolved.get('gateway')
+    expect(profile?.sessionAffinityHeaders).toEqual(['x-opencode-session', 'x-client-request-id'])
+    source.sessionAffinityHeaders?.push('mutated-after')
+    expect(profile?.sessionAffinityHeaders).toEqual(['x-opencode-session', 'x-client-request-id'])
+  })
+
+  it('rejects names Fetch cannot send', () => {
+    expect(() => resolveProfiles(route({ sessionAffinityHeaders: ['x bad header!'] })))
+      .toThrow(/not valid for Fetch/)
+  })
+
+  it('rejects the attribution reserved set, case-insensitively', () => {
+    expect(() => resolveProfiles(route({ sessionAffinityHeaders: ['user-agent'] })))
+      .toThrow(/reserved/)
+    expect(() => resolveProfiles(route({ sessionAffinityHeaders: ['User-Agent'] })))
+      .toThrow(/reserved/)
+  })
+
+  it('parses through the settings schema', () => {
+    const parsed = routeWith({ sessionAffinityHeaders: ['x-opencode-session'] })() as {
+      providers: Record<string, { sessionAffinityHeaders?: string[] }>
+    }
+    expect(parsed.providers['acme-gateway']?.sessionAffinityHeaders).toEqual(['x-opencode-session'])
   })
 })

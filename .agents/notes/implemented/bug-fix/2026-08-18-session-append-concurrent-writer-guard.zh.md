@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-会话写入路径上的每个单写者防护都只在进程内生效：`prepare()` 通过进程内 `SessionStore` 拒绝第二个存活会话，协调器的冲突逻辑只比较自己的映射表。而 `Session.append` 按内存日志长度分配 `seq`，`appendCore` 只对协调器的内存游标校验批次。因此，共享同一 sessions 根目录的两个 harness 进程（`dsh web` 服务器旁边再跑一个 headless 或第二个服务器）能够向同一 JSONL 日志交错写入。实际观察到的交错是：进程 B 恢复了进程 A 仍持有存活的会话，把构造器的 [`session/end-seed` 边界标记](../architecture/2026-07-30-session-end-seed-log-boundary.md)落盘；A 的陈旧 `Session` 随后为下一个事件分配了相同 seq，此后每个事件在各自视角都局部一致，而文件在已提交区域内出现重复 seq。由于扫描器只在最后一个 `turn/end` 之后才容忍缺口，下一次冷加载会以 `corrupt session log: seq gap in committed region` 拒绝整条日志，会话永久无法加载——错误在写入很久之后才暴露、看起来像磁盘损坏，且重启无济于事。已向上游报告，见 [discussion #3099](https://github.com/deepseek-ai/deepseek-harness/discussions/3099)。SQLite 后端此前已能凭 `PRIMARY KEY (session_id, seq)` 约束大声失败；JSONL 后端没有等效防护。
+会话写入路径上的每个单写者防护都只在进程内生效：`prepare()` 通过进程内 `SessionStore` 拒绝第二个存活会话，协调器的冲突逻辑只比较自己的映射表。而 `Session.append` 按内存日志长度分配 `seq`，`appendCore` 只对协调器的内存游标校验批次。因此，共享同一 sessions 根目录的两个 harness 进程（`dsh web` 服务器旁边再跑一个 headless 或第二个服务器）能够向同一 JSONL 日志交错写入。实际观察到的交错是：进程 B 恢复了进程 A 仍持有存活的会话，把构造器的 [`session/end-seed` 边界标记](../architecture/2026-07-30-session-end-seed-log-boundary.zh.md)落盘；A 的陈旧 `Session` 随后为下一个事件分配了相同 seq，此后每个事件在各自视角都局部一致，而文件在已提交区域内出现重复 seq。由于扫描器只在最后一个 `turn/end` 之后才容忍缺口，下一次冷加载会以 `corrupt session log: seq gap in committed region` 拒绝整条日志，会话永久无法加载——错误在写入很久之后才暴露、看起来像磁盘损坏，且重启无济于事。已向上游报告，见 [discussion #3099](https://github.com/deepseek-ai/deepseek-harness/discussions/3099)。SQLite 后端此前已能凭 `PRIMARY KEY (session_id, seq)` 约束大声失败；JSONL 后端没有等效防护。
 
 ## Decision
 

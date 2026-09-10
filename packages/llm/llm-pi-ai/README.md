@@ -68,6 +68,11 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
             reasoningEfforts:
               off:
               high: high
+      opencode-go:
+        apiKeyEnv: OPENCODE_API_KEY
+        sessionAffinityHeaders:
+          - x-opencode-session
+          - x-client-request-id
 ```
 
 | Field | Default | Meaning |
@@ -85,6 +90,9 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
 | `requestImageMaxBytes` | `1 MiB` | Encoded-byte target for each request image before base64 expansion |
 | `maxRequestImageBytes` | `20 MiB` | Aggregate base64 image-payload bound with oldest-first offload |
 | `retryPolicy` | normal, 5 retries | Provider-owned retry policy executed by `dsh-llm-retry` |
+| `sessionAffinityHeaders` | absent | Header names written with the calling session id on every request of this route, enabling per-conversation routing and prompt caching on affinity gateways; undeclared names send nothing, and the attribution reserved set is refused |
+
+`sessionAffinityHeaders` serves gateways that route and cache per conversation: every declared name is written with the calling session's id (same conversation, same value; a fork is a new conversation), while a route without the field — or a call without a session id — sends nothing, so unrelated providers never see the id. Names must be valid Fetch header names and may not collide with the Harness attribution set; the configuration catalog is the exhaustive source for every accepted field and its JSDoc.
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-llm-pi-ai) is the exhaustive source for every accepted field and its JSDoc.
 

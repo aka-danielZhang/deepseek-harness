@@ -8,7 +8,7 @@ English | [中文](2026-08-22-bounded-hierarchical-compaction-fallback.zh.md)
 
 The default compaction backend selected a bounded conversation region but summarized that entire region in one auxiliary request. A history could therefore cross the conversation model's pressure threshold and still be larger than the summarizer model's own context window. The Provider returned `CONTEXT_WINDOW_EXCEEDED`, the automatic listener logged the failure and continued, no checkpoint landed, and the next request retried the same oversized history. Installing an out-of-tree hierarchy Provider did not correct the default because shipped and user presets still mounted `@deepseek-ai/dsh-compaction-basic` inside their isolated compaction realm.
 
-The existing [prefix-cache decision](2026-07-21-compaction-summary-prefix-cache-reuse.md) remains valuable for requests that fit. Replacing every summary with map-reduce would fix the overflow but would unnecessarily increase calls, weaken warm-prefix reuse, and change the established one-shot request contract.
+The existing [prefix-cache decision](../../archived/bug-fix/2026-07-21-compaction-summary-prefix-cache-reuse.md) remains valuable for requests that fit. Replacing every summary with map-reduce would fix the overflow but would unnecessarily increase calls, weaken warm-prefix reuse, and change the established one-shot request contract.
 
 ## Decision
 

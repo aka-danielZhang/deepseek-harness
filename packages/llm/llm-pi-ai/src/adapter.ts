@@ -201,13 +201,26 @@ function reasoningInfo(
   }
 }
 
-/** Merge deployment headers while removing case-insensitive attribution collisions. */
-function requestHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
+/**
+ * Merge deployment headers while removing case-insensitive attribution
+ * collisions, then write the route's session-affinity headers last: each
+ * declared name carries the calling session id so affinity gateways can
+ * route and cache per conversation. An absent session id (or an unset
+ * `sessionAffinityHeaders` list) writes nothing.
+ */
+function requestHeaders(
+  headers: Readonly<Record<string, string>> | undefined,
+  sessionAffinityHeaders: readonly string[] | undefined,
+  sessionId: string | undefined,
+): Record<string, string> {
   const attribution = attributionHeaders()
   const reserved = new Set(Object.keys(attribution).map(name => name.toLowerCase()))
   return {
     ...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => !reserved.has(name.toLowerCase()))),
     ...attribution,
+    ...sessionId === undefined
+      ? {}
+      : Object.fromEntries((sessionAffinityHeaders ?? []).map(name => [name, sessionId])),
   }
 }
 
@@ -384,8 +397,13 @@ export class PiAiAdapter extends LlmAdapter {
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
-        // Harness-owned and therefore win collisions.
-        headers: requestHeaders(profile.headers),
+        // Harness-owned and therefore win collisions. Session-affinity
+        // headers bind the request to the calling conversation.
+        headers: requestHeaders(
+          profile.headers,
+          profile.sessionAffinityHeaders,
+          options.sessionId === undefined ? undefined : String(options.sessionId),
+        ),
       })
       const iterator = toStreamChunks(events, model.contextWindow, options.signal, model.id)[Symbol.asyncIterator]()
       let exhausted = false

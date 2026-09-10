@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-一个仅提供建议的回合结束守卫，而非面向模型的工具：它不会出现在工具列表中，不会否决任何回合，只增加一种行为——当一个本可完成的回合即将结束、而其当前有效 todo 清单仍有未完成项时，它会向**同一回合**注入一条 plugin-notice，要求模型完成并勾掉这些项、围绕明确放弃重写清单，或显式说明清单为何保持开放。是否遵从完全由模型决定；守卫每回合只提醒一次，绝不循环。决策记录见 [todo-completion-guard Agent Note](../../../.agents/notes/implemented/feature/2026-08-19-todo-completion-guard.md)。
+一个仅提供建议的回合结束守卫，而非面向模型的工具：它不会出现在工具列表中，不会否决任何回合，只增加一种行为——当一个本可完成的回合即将结束、而其当前有效 todo 清单仍有未完成项时，它会向**同一回合**注入一条 plugin-notice，要求模型完成并勾掉这些项、围绕明确放弃重写清单，或显式说明清单为何保持开放。是否遵从完全由模型决定；守卫每回合只提醒一次，绝不循环。决策记录见 [todo-completion-guard Agent Note](../../../.agents/notes/implemented/feature/2026-08-19-todo-completion-guard.zh.md)。
 
 ## 触发时机
 
