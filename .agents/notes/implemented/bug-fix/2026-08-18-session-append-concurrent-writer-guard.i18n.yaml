@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-18-session-append-concurrent-writer-guard.md
 2026-08-18-session-append-concurrent-writer-guard.md: 4f98f1b498d63364875b46fa4a4b7289b601d856
-2026-08-18-session-append-concurrent-writer-guard.zh.md: 624e790306d03bd493ba931544ed31c0344f0b09
+2026-08-18-session-append-concurrent-writer-guard.zh.md: dca74a4fe9cd81cc647e27b596cc578a243cf21d
