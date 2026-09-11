@@ -10,7 +10,7 @@ Selecting a model in the Web composer reset its reasoning effort to the model's 
 
 ## Decision
 
-The effort the user last explicitly chose on one provider/model route is remembered in a new Settings namespace, `agent-model-efforts` (an entry list; at most one entry per route), owned by `AgentDefaultModelConfig` beside the existing `agent-default-model` namespace — switching the default selection never overwrites a route's memory. The service exposes `recallEffort(provider, model)` and `rememberEffort(provider, model, effort?)`; without a settings provider both stay no-ops with the composition entry current.
+The effort the user last explicitly chose on one provider/model route is remembered in a new Settings namespace, `agent-model-efforts` (an entry list; at most one entry per route), owned by `AgentDefaultModelConfig` beside the existing `agent-default-model` namespace — switching the default selection never overwrites a route's memory. The service exposes `recallEffort(provider, model)` and `rememberEffort(provider, model, effort?)`; without a settings provider both stay no-ops with the composition entry current. Since each update replaces the route list, the service serializes its complete read-compute-replace operation; concurrent choices on different routes preserve both entries, and the queue advances after a failed write.
 
 `session.selectModel` in the Session Controller owns the policy:
 

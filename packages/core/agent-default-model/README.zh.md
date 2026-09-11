@@ -11,13 +11,6 @@ kind: "package-reference"
 
 `dsh-agent-default-model` 在会话未指定模型时，为新创建的 agent 提供共享的默认提供方与模型。使用它可以为所有受支持的 agent 入口统一选择起始模型，其中包括 `dsh --profile headless`。设置可用时，用户可以覆盖已配置的选择（包括推理（reasoning）强度），保存的更改会在后续读取中生效。该默认值作用于整个进程；按会话选择模型仍由创建 agent 的入口负责。
 
-- `ctx.agentDefaultModel.currentSelection()` 返回一份分离的 `{ provider, model, reasoningEffort? }` 选择，供新创建的 Agent 使用。
-- `ctx.agentDefaultModel.saveSelection(selection)` 保存完整的用户选择。未挂载设置提供方时，此调用不执行任何操作，组合配置项仍为当前值。
-- `ctx.agentDefaultModel.recallEffort(provider, model)` 返回用户在该路由上最后一次显式选择的推理强度；没有记忆时返回 `undefined`。
-- `ctx.agentDefaultModel.rememberEffort(provider, model, effort?)` 记录——或在 `effort` 为 `undefined` 时清除——该路由的记忆强度。未挂载设置提供方时同样不执行任何操作。
-
-被记忆的强度存放在独立的 `agent-model-efforts` Settings 分节（以提供方／模型为键的条目列表），因此切换默认选择不会覆盖它们。该服务只保存被告知的值；咨询记忆的消费方会对照模型的实时能力校验，因为被记住的等级可能比当初提供它的声明活得更久。
-
 ## 目录
 
 - [使用本包](#use-this-package)
@@ -62,6 +55,8 @@ await ctx.agentDefaultModel.saveSelection({ provider, model, reasoningEffort: 'h
 ```
 
 未挂载设置提供方时，`saveSelection()` 不执行任何操作，组合配置项仍为当前值。该服务不校验目录成员关系：提供方路由可以服务未在目录中公布的模型；发起模型请求的消费方负责可用性诊断。
+
+`recallEffort(provider, model)` 读取一条路由最后一次显式选择的推理等级。`rememberEffort(provider, model, effort?)` 记录它，或在 `effort` 为 `undefined` 时清除；这些条目位于独立的 `agent-model-efforts` Settings 分节，绝不会覆盖默认选择。消费方在使用召回值前对照模型实时能力进行校验。
 
 -----
 

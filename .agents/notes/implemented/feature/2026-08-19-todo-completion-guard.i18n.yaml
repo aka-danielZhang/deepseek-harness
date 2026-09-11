@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-19-todo-completion-guard.md
-2026-08-19-todo-completion-guard.md: 88c1b65515fb8438b2c0e327f568ad53fd9d4c4e
-2026-08-19-todo-completion-guard.zh.md: 83183f790bcfa8c09f43aaae491cde37b719c821
+2026-08-19-todo-completion-guard.md: 15e43b878a85ba2b18b9dd8bcc32cd7a20896bfa
+2026-08-19-todo-completion-guard.zh.md: 8fdcfb7deb45f03d579855509a4b32b349421562

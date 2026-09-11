@@ -12,6 +12,7 @@ import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 /** The smallest real provider: one in-memory document, always writable. */
 class MemorySettings extends SettingsProvider {
   doc: Record<string, unknown> = {}
+  failNext = false
 
   get writable(): boolean {
     return true
@@ -22,6 +23,10 @@ class MemorySettings extends SettingsProvider {
   }
 
   protected persist(ns: SettingsNamespace, section: Record<string, unknown>): Promise<void> {
+    if (this.failNext) {
+      this.failNext = false
+      return Promise.reject(new Error('synthetic settings failure'))
+    }
     this.doc = { ...this.doc, [ns]: structuredClone(section) }
     return Promise.resolve()
   }
@@ -30,6 +35,7 @@ class MemorySettings extends SettingsProvider {
 async function boot(): Promise<{
   ctx: Context
   settingsFiber: Context['fiber']
+  settings: MemorySettings
   defaultModel: AgentDefaultModelConfig
 }> {
   const ctx = new Context()
@@ -39,7 +45,12 @@ async function boot(): Promise<{
     provider: 'deepseek-official',
     model: 'deepseek-v4-flash',
   })
-  return { ctx, settingsFiber, defaultModel: ctx.agentDefaultModel }
+  return {
+    ctx,
+    settingsFiber,
+    settings: settingsFiber.ctx.settings as MemorySettings,
+    defaultModel: ctx.agentDefaultModel,
+  }
 }
 
 describe('AgentDefaultModelConfig', () => {
@@ -106,6 +117,29 @@ describe('per-route effort memory', () => {
     await bench.defaultModel.rememberEffort('deepseek-official', 'deepseek-v4-pro', ReasoningEffortId('max'))
     await bench.defaultModel.rememberEffort('acme-gateway', 'acme-large', ReasoningEffortId('high'))
     expect(bench.defaultModel.recallEffort('deepseek-official', 'deepseek-v4-pro')).toBe('max')
+    expect(bench.defaultModel.recallEffort('acme-gateway', 'acme-large')).toBe('high')
+    await bench.ctx.fiber.dispose()
+  })
+
+  it('preserves concurrent writes for different routes', async () => {
+    const bench = await boot()
+    await Promise.all([
+      bench.defaultModel.rememberEffort('deepseek-official', 'deepseek-v4-pro', ReasoningEffortId('max')),
+      bench.defaultModel.rememberEffort('acme-gateway', 'acme-large', ReasoningEffortId('high')),
+    ])
+    expect(bench.defaultModel.recallEffort('deepseek-official', 'deepseek-v4-pro')).toBe('max')
+    expect(bench.defaultModel.recallEffort('acme-gateway', 'acme-large')).toBe('high')
+    await bench.ctx.fiber.dispose()
+  })
+
+  it('continues the write queue after a storage failure', async () => {
+    const bench = await boot()
+    bench.settings.failNext = true
+    await expect(bench.defaultModel.rememberEffort(
+      'deepseek-official', 'deepseek-v4-pro', ReasoningEffortId('max'),
+    )).rejects.toThrow('synthetic settings failure')
+    await bench.defaultModel.rememberEffort('acme-gateway', 'acme-large', ReasoningEffortId('high'))
+    expect(bench.defaultModel.recallEffort('deepseek-official', 'deepseek-v4-pro')).toBeUndefined()
     expect(bench.defaultModel.recallEffort('acme-gateway', 'acme-large')).toBe('high')
     await bench.ctx.fiber.dispose()
   })

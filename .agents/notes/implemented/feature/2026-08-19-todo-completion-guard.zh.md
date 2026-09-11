@@ -37,4 +37,4 @@ Agent 经常在 `todo_write` 项未完成时就结束回合。工具描述早已
 
 ## 相关
 
-loop 缺少轮次预算与 Stop-hook 自限警告记录于 `packages/core/agent-loop/README.md`；[repeat-tool-reminder](2026-07-08-repeat-tool-guard.md) 拥有工具链上共享的 advisory 哲学。
+loop 缺少轮次预算与 Stop-hook 自限警告记录于 `packages/core/agent-loop/README.md`；[repeat-tool-reminder](../../archived/feature/2026-07-08-repeat-tool-guard.md)拥有工具链上共享的 advisory 哲学。

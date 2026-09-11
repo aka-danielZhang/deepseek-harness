@@ -85,8 +85,6 @@ type ManualCompactionErrorCode =
 
 压力压缩在 `agent/pre-step` waterfall（瀑布式事件）中运行，先于请求推导。一旦压力或规范化溢出满足条件，compaction-basic 会在选择范围前调用可选的 [`ctx.toolResultPruner`](../../packages/compaction/compaction-tool-result-pruner/README.zh.md)，再通过 `ctx.tokenMeter` 重新测量，并且可以在不生成摘要的情况下推进 surface。失败请求的恢复在失败的步骤关闭后通过 `agent/request-error` 运行；仅当 surface replacement generation 前进时才返回重试动作，即便后续摘要工作在剪枝后抛异常亦如此；取消仍然优先。区域边界保持工具调用/结果配对，但不保持整个轮次，因此一个过大轮次中较早关闭的步骤可以被压缩。`dsh-compaction-basic` 拥有阈值、保留尾部策略、溢出上限与失败处理。
 
-当估算输入与输出预留能装入摘要目标时，stock 后端会保留复用 cache 的 one-shot 摘要器。否则，或 one-shot 出现规范化上下文溢出后，它会映射有界、按时间排序且工具配对平衡的 span，再递归归并结构化部分检查点。Provider 已确认的溢出只会二分被拒 span；成功 sibling 会被保留。多调用结果不会声称单调用来源，usage 只在完整且没有失败尝试时汇总，并且只有整个 hierarchy 成功后，区域事务才安装替换。缺少容量元数据时仍保留 one-shot 路径，但该路径溢出后无法进行有界恢复。
-
 该 Service Definition 导出 `toolPairingBalancedBefore(session, seq)` 与 `toolPairingBalancedAfter(session, seq)`，用于检查 seq 之前与之后的工具调用/结果配对。两者都会验证当前 surface 成员关系，并拒绝缺失的 seq 与遗留结果；[包约定](../../packages/compaction/compaction/README.zh.md#tool-pairing-boundaries)定义其缓存行为。
 
 ## 工具结果剪枝产出

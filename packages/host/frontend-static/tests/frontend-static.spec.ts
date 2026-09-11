@@ -35,7 +35,7 @@ async function loadComposition(): Promise<Context> {
   const dist = join(root, 'dist')
   await mkdir(dist)
   const distIndex = join(dist, 'index.html')
-  await writeFile(distIndex, '<head></head><body>shell</body>')
+  await writeFile(distIndex, '<head></head><body>shell-\u58f3</body>')
   await writeFile(join(dist, 'app.js'), 'export {}')
   await writeFile(join(dist, 'blob.bin'), 'BLOB')
   await writeFile(join(dist, 'manifest.webmanifest'), '{}')
@@ -153,13 +153,15 @@ describe('real Loader composition', () => {
 
     // Only the root and index path render index.html through registered taps.
     const untap = server.tapIndex(html => html.replace('<head>', '<head><script>window.__T__=1</script>'))
+    let rootIndexLength: string | null = null
     for (const path of ['/', '/index.html', '/?fixture']) {
       const got = await request(port, path, authenticated())
       expect(got.status).toBe(200)
       expect(got.type).toBe('text/html; charset=utf-8')
-      expect(Number(got.length)).toBeGreaterThan(0)
+      expect(got.length).toBe(String(Buffer.byteLength(got.body)))
       expect(got.body).toContain('__T__')
-      expect(got.body).toContain('shell')
+      expect(got.body).toContain('shell-\u58f3')
+      if (path === '/') rootIndexLength = got.length
     }
     const indexHead = await request(port, '/', authenticated({ method: 'HEAD' }))
     expect(indexHead).toMatchObject({
@@ -167,7 +169,7 @@ describe('real Loader composition', () => {
       type: 'text/html; charset=utf-8',
       body: '',
     })
-    expect(Number(indexHead.length)).toBeGreaterThan(0)
+    expect(indexHead.length).toBe(rootIndexLength)
     untap()
     expect((await request(port, '/', authenticated())).body).not.toContain('__T__')
 

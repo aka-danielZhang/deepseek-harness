@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package keeps long agent conversations working near the model's context limit. As token pressure builds, it condenses the oldest history into a summary while preserving recent messages; after a context-overflow error, it condenses and retries. You can also request condensation with `/compact` and optionally trim oversized tool outputs first. Condensation uses one extra model request and retains only its summary text. It cannot reduce the system prompt, tools, or session prefix, or split one indivisible unit such as a single huge tool call.
+This package keeps long agent conversations working near the model's context limit. As token pressure builds, it condenses the oldest history into a summary while preserving recent messages; after a context-overflow error, it condenses and retries. You can also request condensation with `/compact` and optionally trim oversized tool outputs first. Fitting input uses one extra model request; oversized input uses bounded hierarchical map-reduce calls, and only the final summary text is retained. It cannot reduce the system prompt, tools, or session prefix, or split one indivisible unit such as a single huge tool call.
 
 ## Table of Contents
 
@@ -109,7 +109,7 @@ The backend is built on four commitments:
 
 - **One measurement service prices every decision.** The singleton `ctx.tokenMeter` measures the latest canonical logged envelope and current surface at one consumed-log revision. When the routed adapter declares request-image pricing, the meter applies it to image history. Pressure, recent-tail retention, range selection, and shrink validation use the same route-priced node figures; logged replacement shadow prices stay on the route-independent heuristic so pure projection folds remain consistent.
 - **The log-recorded bracket is the transaction.** All entry points share one bracket-first region transaction: validate the range and live lock, append `compaction/start` synchronously, prepare and await the summary, revalidate, append `compaction/summary` plus the replacement, and make exactly one closing attempt. Automatic and explicit-region calls require a numeric open-turn owner and whole-surface stability; `compactNow()` reserves idle admission, uses `turn: null`, accepts append-only context outside its selected span, flushes every closed attempt, and releases admission in `finally`.
-- **Summarization reuses the provider's warm prefix.** Replaying the system prompt held by the `system/message` at surface node 0, the last routed request's tools, and the shadowed-region messages byte-for-byte makes the auxiliary call a genuine prefix of the conversation, so only the trailing instruction and the summary output are uncached.
+- **Summarization preserves the cache-reusing fast path and bounds oversized work.** A fitting one-shot replays the system prompt held by the `system/message` at surface node 0, the last routed request's tools, and the shadowed-region messages byte-for-byte. Hierarchical calls replay that same fixed system head exactly once while bounding chronological map spans and recursive reductions.
 - **`summarize()` is the sole subclass hook.** A template- or remote-summarizer subclass can override it while pressure, retention, cited source events, shrink validation, and shadowed-token accounting stay on the token meter.
 
 ### Automatic triggers and overflow recovery
@@ -120,7 +120,7 @@ Pressure policy resolves capacity from the adapter that owns the durable route. 
 
 ### Summarization mechanics
 
-A direct `ctx.llm.stream()` call uses the configured provider/model pair and cap, falling back to the latest logged request target and then the `AgentOptions` pair, without running the loop-only `agent/request` extension point. The call replays the derived `system/message` at surface node 0 as the leading entry of `messages`, followed by the shadowed-region messages (including a shadowed in-history `system/message` in its surface position), and carries the header's tools verbatim — including image references, which the selected adapter must resolve or explicitly reject — and appends the compaction instruction as the final user message, so it reuses the provider's warm prefix cache instead of invalidating it. An empty-content system head contributes no message but remains outside the compacted range. The call sets `GenerateOptions.purpose` to `compaction`; only returned text enters the checkpoint, excluding reasoning and tool calls. Image output fails with `UNSUPPORTED_CONTENT` rather than disappearing. The replacement user message frames the summary with `<compacted-summary>` tags; the raw summary remains on the `compaction/summary` event.
+A direct `ctx.llm.stream()` call uses the configured provider/model pair and cap, falling back to the latest logged request target and then the `AgentOptions` pair, without running the loop-only `agent/request` extension point. When the complete request fits, the call replays the derived `system/message` at surface node 0 as the leading entry of `messages`, followed by the shadowed-region messages (including a shadowed in-history `system/message` in its surface position), carries the header's tools verbatim, and appends the compaction instruction as the final user message. Oversized or Provider-rejected input is grouped into tool-balanced chronological map spans and recursively reduced; every map and reduce request replays the current non-empty system head exactly once as its first message, while later dynamic `system/message` entries remain ordinary chronological map input and are never promoted or deleted. The fixed-head, optional-tool, and instruction cost is included in every stage budget. Tool schemas accompany hierarchy calls only when `replayTools: true`. An empty-content system head contributes no message but remains outside the compacted range. Every call sets `GenerateOptions.purpose` to `compaction`; only returned text enters the checkpoint, excluding reasoning and tool calls. Image output fails with `UNSUPPORTED_CONTENT` rather than disappearing. The replacement user message frames the summary with `<compacted-summary>` tags; the raw final summary remains on the `compaction/summary` event.
 
 ### The region transaction
 
@@ -136,7 +136,10 @@ The transaction validates the surface span and the durable lock, appends `compac
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: `BasicCompactionEngine`, automatic listeners, entry-point dispatch |
 | [`src/region.ts`](src/region.ts) | Retention selection and the shared bracket-first compaction transaction |
-| [`src/summarizer.ts`](src/summarizer.ts) | Default `ctx.llm.stream()` summarization, checkpoint framing, safe-summary projection |
+| [`src/summarizer.ts`](src/summarizer.ts) | Default `ctx.llm.stream()` one-shot summarization, checkpoint framing, safe-summary projection |
+| [`src/hierarchical.ts`](src/hierarchical.ts) | Bounded map-reduce fallback, adaptive splitting, stage usage aggregation |
+| [`src/hierarchical-planner.ts`](src/hierarchical-planner.ts) | Tool-balanced units and greedy token-budget planning |
+| [`src/hierarchical-prompts.ts`](src/hierarchical-prompts.ts) | Structured map/reduce prompts and output validation |
 | [`src/config.ts`](src/config.ts) | Load-time validation and routed-model policy resolution |
 | [`src/types.ts`](src/types.ts) | `BasicCompactionConfig` and resolved policy vocabulary |
 | — | No runtime invariant companion is published; this package exposes no independent event sequence or mutable data relation beyond contracts enforced at its owning seam. The durable bracket remains observable in the session log. |
@@ -186,7 +189,7 @@ Replacing rather than append-only. Each checkpoint invalidates reuse from the fi
 
 #### What the model sees
 
-When the complete request fits, the summarization model receives the conversation replayed verbatim — the same system prompt, tool schemas, and messages the last routed request sent for the shadowed region — followed by one final user message: the compaction instruction below. For hierarchy, each map request receives the same system prompt, an ordered tool-balanced source span, and a structured map instruction; reduce requests receive ordered `<partial-summary>` frames and a structured reduce instruction. Tool schemas accompany hierarchy calls only when `replayTools: true`. The conversation model never sees these private requests or their reasoning; only the final text is stored.
+When the complete request fits, the summarization model receives the conversation replayed verbatim — the same system head, tool schemas, and messages the last routed request sent for the shadowed region — followed by one final user message: the compaction instruction below. For hierarchy, each map request receives the same system head exactly once, an ordered tool-balanced source span, and a structured map instruction; reduce requests receive that same head exactly once, ordered `<partial-summary>` frames, and a structured reduce instruction. Later system updates remain in their original map chronology instead of becoming a second fixed head. Tool schemas accompany hierarchy calls only when `replayTools: true`. The conversation model never sees these private requests or their reasoning; only the final text is stored.
 
 ##### Compaction instruction (final user message)
 
@@ -233,7 +236,7 @@ A fitting input costs one separate model call: the replayed conversation prefix 
 
 #### KV Cache effect
 
-The fitting one-shot request matches the conversation's replayed system prompt, tools, and shadowed-region messages byte-for-byte, so the provider's warm prefix cache is reused up to the trailing instruction. Routing to another model or compacting a non-head range forgoes that reuse. Hierarchy intentionally bounds each call and therefore cannot preserve one full warm prefix: map calls may reuse their leading system/message prefix where the Provider permits, while reduce calls operate on newly generated partials. `replayTools: false` also omits the tool-schema prefix to leave more room for source messages.
+The fitting one-shot preserves the complete warm prefix through the shadowed region. Hierarchical calls preserve prefix reuse for the fixed system head and, when enabled, tool schemas; map payloads and reduction frames diverge after that shared prefix. Routing the summarizer to a different provider/model forgoes the conversation route's cache reuse.
 
 ## Known Limitations and Deferred Work
 
@@ -244,9 +247,9 @@ These limits define when automatic condensation is a poor fit or needs special c
 
 - **Meter accuracy follows the fixed heuristic** — missing reusable provider usage falls back to character count plus structural overhead rather than exact tokenization; image occurrences carry provider-exact visual tokens only on routes whose adapter declares request-image pricing.
 - **Overflow classification is adapter-maintained** — provider wording can change; both DeepSeek adapters normalize recognized context-limit failures to `CONTEXT_WINDOW_EXCEEDED`.
-- **Bounded recovery requires summary-model capacity metadata** — an adapter that omits `contextWindow` keeps the legacy one-shot path. If that request succeeds, behavior is unchanged; if it overflows, hierarchy cannot derive safe chunk budgets and fails with an actionable capacity error.
-- **Hierarchy output is a strict checkpoint protocol** — every map and reduce stage must return all required headings. Truncation, visual output, malformed structure, exhausted `maxDepth`, or an indivisible source/partial that still overflows fails the complete compaction transaction without installing a partial checkpoint.
 - **Some indivisible-unit and envelope-only overflow remains outside surface compaction** — recovery cannot shrink system/tools/prefix, split an indivisible non-tool node, or repair a tool unit whose non-prunable remainder still exceeds the window. The optional pruner can shrink text-bearing tool-result bulk inside an otherwise indivisible pair.
+- **Hierarchy requires declared summary-model capacity** — without a positive integer `contextWindow`, fitting input still uses one-shot summarization, but a confirmed one-shot overflow fails clearly because bounded chunk planning has no trustworthy window.
+- **Hierarchy is intentionally bounded** — a Provider-rejected indivisible tool-balanced span, fixed system/tools/instruction overhead that exhausts the stage budget, a reduction round that does not reduce partial count, or reaching `maxDepth` fails instead of looping.
 - **`compactRegion` requires an open turn** — a manual call on a fully-closed session throws ("no open turn") rather than compacting.
 - **Summarization failure preserves the latest durable surface** — before any replacement, the auto path logs a warning and proceeds with full over-budget history. If pruning already landed, a later summarization failure proceeds from that durable pruned surface. Summarization truncation at `maxTokens`, which hidden reasoning tokens can consume, follows the same rule.
 

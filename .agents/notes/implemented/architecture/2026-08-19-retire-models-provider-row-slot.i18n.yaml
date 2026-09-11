@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-19-retire-models-provider-row-slot.md
-2026-08-19-retire-models-provider-row-slot.md: d11619e411062147bdc568a362c040c1dee037f8
-2026-08-19-retire-models-provider-row-slot.zh.md: 05fed2b2a1f17eb4002bb73fdd07ca5fb7d4fd38
+2026-08-19-retire-models-provider-row-slot.md: ad154e94c3f29151913fef02ad5ff9ed8731279b
+2026-08-19-retire-models-provider-row-slot.zh.md: 218f5bdfe0e405f71c18719c5a1058882e5433d5

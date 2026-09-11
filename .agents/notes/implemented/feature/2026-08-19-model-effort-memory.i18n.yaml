@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-19-model-effort-memory.md
-2026-08-19-model-effort-memory.md: 5f41b3b4524dcde500ffc79e612b8175290e1edb
-2026-08-19-model-effort-memory.zh.md: 1173fa8fa20bd3a87bb470cdaa136dd08f1b135e
+2026-08-19-model-effort-memory.md: a92753cfcdfad400fbb8865e7fbf95535e66a88a
+2026-08-19-model-effort-memory.zh.md: 83f88755430ba396a7448061198b116ee39f87b8

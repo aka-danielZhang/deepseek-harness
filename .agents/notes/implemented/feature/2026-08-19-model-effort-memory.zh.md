@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-用户在某条提供方／模型路由上最后一次显式选择的等级，被记忆进新的 Settings 命名空间 `agent-model-efforts`（条目列表；每条路由至多一条），由 `AgentDefaultModelConfig` 与既有 `agent-default-model` 命名空间并列持有——切换默认选择永远不会覆盖某条路由的记忆。服务暴露 `recallEffort(provider, model)` 与 `rememberEffort(provider, model, effort?)`；未挂载设置提供方时两者均为空操作，组合配置项保持当前。
+用户在某条提供方／模型路由上最后一次显式选择的等级，被记忆进新的 Settings 命名空间 `agent-model-efforts`（条目列表；每条路由至多一条），由 `AgentDefaultModelConfig` 与既有 `agent-default-model` 命名空间并列持有——切换默认选择永远不会覆盖某条路由的记忆。服务暴露 `recallEffort(provider, model)` 与 `rememberEffort(provider, model, effort?)`；未挂载设置提供方时两者均为空操作，组合配置项保持当前。由于每次更新都会替换路由列表，服务会串行执行完整的“读取、计算、替换”过程；不同路由的并发选择会同时保留，单次写入失败也不会阻断队列后续写入。
 
 Session Controller 的 `session.selectModel` 持有策略：
 

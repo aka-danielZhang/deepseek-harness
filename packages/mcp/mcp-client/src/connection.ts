@@ -192,7 +192,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     failedAttempts,
   })
 
-  /** Publish the current committed status; an observer throw cannot disrupt the supervisor. */
+  /** Publish the current committed status; a synchronous observer throw cannot disrupt the supervisor. */
   const publish = (): void => {
     try {
       ctx.emit('mcp-client/status', config.serverName, computeMcpClientStatus(facts()), disposers.size)

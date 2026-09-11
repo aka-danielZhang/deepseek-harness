@@ -9,3 +9,5 @@ header:
   changes: 1
   promptChanges: 1
   toolSchemasSource: compaction-recovery
+replay:
+  override: true
