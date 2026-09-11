@@ -10,7 +10,7 @@ Affinity gateways route and cache per conversation. OpenCode Go names DeepSeek H
 
 ## Decision
 
-`llm-pi-ai` provider profiles gain `sessionAffinityHeaders: string[]`. When a call carries a session id, the adapter writes each declared name with that id as its value, after profile headers and attribution — one injection point covering every wire path, because all three pi-ai dispatches merge the harness `headers` option last. A route without the field sends nothing; a call without a session id sends nothing. Names are validated against Fetch at resolution, and the attribution reserved set (read from `attributionHeaders()` so the check cannot drift) is refused — `user-agent` keeps its mandatory value.
+`llm-pi-ai` provider profiles gain `sessionAffinityHeaders: string[]`. When a call carries a session id, the adapter writes each declared name with that id as its value, after profile headers and attribution — one injection point covering every wire path, because all three pi-ai dispatches merge the harness `headers` option last. The `opencode-go` catalog route — and any route whose endpoint is opencode.ai — additionally defaults to `x-opencode-session` + `x-client-request-id`, so the gateway works with zero configuration; an explicit empty array opts out. Names are validated against Fetch at resolution, and the attribution reserved set (read from `attributionHeaders()` so the check cannot drift) is refused — `user-agent` keeps its mandatory value.
 
 ## Alternatives considered
 

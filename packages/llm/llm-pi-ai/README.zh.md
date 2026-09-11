@@ -90,7 +90,7 @@ kind: "package-reference"
 | `requestImageMaxBytes` | `1 MiB` | 每张请求图片在 base64 扩展前的编码字节目标 |
 | `maxRequestImageBytes` | `20 MiB` | 带最旧优先卸载的 base64 图片载荷总上限 |
 | `retryPolicy` | normal，5 次重试 | 由 `dsh-llm-retry` 执行的提供方自有重试策略 |
-| `sessionAffinityHeaders` | 缺省 | 该路由每次请求携带的会话亲和头名列表，值为当前会话 ID，用于亲和网关的按会话路由与提示词缓存；未声明的路由不发送任何此类头，attribution 保留名被拒绝 |
+| `sessionAffinityHeaders` | 缺省 | 该路由每次请求携带的会话亲和头名列表，值为当前会话 ID，用于亲和网关的按会话路由与提示词缓存；`opencode-go` 目录路由及 opencode.ai 端点默认发送 `x-opencode-session` + `x-client-request-id`，显式空数组表示退出，其它路由不发送；attribution 保留名被拒绝 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-llm-pi-ai)是每个受支持字段及其 JSDoc 的穷尽式真源。
 

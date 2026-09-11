@@ -153,3 +153,46 @@ describe('sessionAffinityHeaders profile field', () => {
     expect(parsed.providers['acme-gateway']?.sessionAffinityHeaders).toEqual(['x-opencode-session'])
   })
 })
+
+describe('opencode-go default affinity headers', () => {
+  const goRoute = (profile: Record<string, unknown>): Record<string, PiAiProviderProfile> => ({
+    'opencode-go': {
+      apiKeyEnv: 'OPENCODE_API_KEY',
+      ...profile,
+    } as unknown as PiAiProviderProfile,
+  })
+
+  it('defaults the catalog opencode-go route to both affinity headers', () => {
+    const resolved = resolveProfiles(goRoute({ models: [{ id: 'minimax-m3' }], api: 'anthropic-messages' }))
+    expect(resolved.get('opencode-go')?.sessionAffinityHeaders).toEqual([
+      'x-opencode-session',
+      'x-client-request-id',
+    ])
+  })
+
+  it('defaults a custom-keyed route whose endpoint is opencode.ai', () => {
+    const resolved = resolveProfiles(goRoute({
+      baseURL: 'https://opencode.ai/zen/go/v1',
+      models: [{ id: 'glm-5' }],
+      api: 'openai-completions',
+    }))
+    expect(resolved.get('opencode-go')?.sessionAffinityHeaders).toEqual([
+      'x-opencode-session',
+      'x-client-request-id',
+    ])
+  })
+
+  it('an explicit empty array opts the route out', () => {
+    const resolved = resolveProfiles(goRoute({
+      models: [{ id: 'minimax-m3' }],
+      api: 'anthropic-messages',
+      sessionAffinityHeaders: [],
+    }))
+    expect(resolved.get('opencode-go')?.sessionAffinityHeaders).toEqual([])
+  })
+
+  it('routes unrelated to opencode keep sending nothing', () => {
+    const resolved = resolveProfiles({ deepseek: { models: [{ id: 'm' }], api: 'openai-completions' } })
+    expect(resolved.get('deepseek')?.sessionAffinityHeaders).toBeUndefined()
+  })
+})

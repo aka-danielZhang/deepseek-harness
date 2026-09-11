@@ -407,6 +407,29 @@ function assertValidHeaders(provider: string, headers: Readonly<Record<string, s
 }
 
 /**
+ * Session-affinity headers written by default for the OpenCode Go gateway:
+ * `x-opencode-session` is the documented per-conversation routing key, and
+ * `x-client-request-id` is the header OpenCode already recognized on
+ * Harness traffic before this field existed.
+ */
+const OPENCODE_AFFINITY_DEFAULT: readonly string[] = ['x-opencode-session', 'x-client-request-id']
+
+/**
+ * Resolve a route's effective session-affinity header list. An explicit
+ * field wins verbatim (an empty array is a deliberate opt-out); the
+ * OpenCode Go catalog route — the `opencode-go` provider id or any
+ * opencode.ai endpoint — defaults to {@link OPENCODE_AFFINITY_DEFAULT} so
+ * the gateway routes and caches per conversation with zero configuration.
+ * Every other route sends nothing.
+ */
+function effectiveSessionAffinityHeaders(provider: string, source: PiAiProviderProfile): readonly string[] | undefined {
+  if (source.sessionAffinityHeaders !== undefined) return source.sessionAffinityHeaders
+  const opencodeRoute = provider === 'opencode-go'
+    || (source.baseURL !== undefined && source.baseURL.includes('opencode.ai'))
+  return opencodeRoute ? [...OPENCODE_AFFINITY_DEFAULT] : undefined
+}
+
+/**
  * Reject a session-affinity header name that Fetch cannot send or that
  * collides with the attribution reserved set: the affinity value is the
  * session id, while `user-agent` carries the mandatory Harness attribution.
@@ -460,7 +483,7 @@ export function resolveProfiles(
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
     assertValidHeaders(provider, source.headers)
-    assertValidSessionAffinityHeaders(provider, source.sessionAffinityHeaders)
+    assertValidSessionAffinityHeaders(provider, effectiveSessionAffinityHeaders(provider, source))
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0
@@ -534,7 +557,10 @@ export function resolveProfiles(
       requestImageMaxBytes,
       retryPolicy: resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`),
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
-      ...rest.sessionAffinityHeaders === undefined ? {} : { sessionAffinityHeaders: [...rest.sessionAffinityHeaders] },
+      ...(() => {
+        const effective = effectiveSessionAffinityHeaders(provider, source)
+        return effective === undefined ? {} : { sessionAffinityHeaders: [...effective] }
+      })(),
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog?.configuredMaxTokens ?? new Map(),
       modelErrors: catalog?.modelErrors ?? new Map(),

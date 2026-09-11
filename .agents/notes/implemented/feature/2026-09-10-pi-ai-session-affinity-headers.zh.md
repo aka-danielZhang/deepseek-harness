@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-`llm-pi-ai` 的 provider profile 新增 `sessionAffinityHeaders: string[]`。调用携带会话 ID 时，adapter 把每个声明的头名写为该 ID，置于 profile headers 与 attribution 之后——一个注入点覆盖全部线上路径，因为 pi-ai 三个分发都把 harness `headers` 选项最后合并。未配置该字段的路由不发送；调用无会话 ID 时不发送。头名在解析时按 Fetch 校验，attribution 保留集（读取自 `attributionHeaders()`，两处检查不会漂移）被拒绝——`user-agent` 保持其强制值。
+`llm-pi-ai` 的 provider profile 新增 `sessionAffinityHeaders: string[]`。调用携带会话 ID 时，adapter 把每个声明的头名写为该 ID，置于 profile headers 与 attribution 之后——一个注入点覆盖全部线上路径，因为 pi-ai 三个分发都把 harness `headers` 选项最后合并。`opencode-go` 目录路由及 opencode.ai 端点默认启用 `x-opencode-session` + `x-client-request-id`，网关零配置即用；显式空数组表示退出。头名在解析时按 Fetch 校验，attribution 保留集（读取自 `attributionHeaders()`，两处检查不会漂移）被拒绝——`user-agent` 保持其强制值。
 
 ## Alternatives considered
 

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-10-pi-ai-session-affinity-headers.md
-2026-09-10-pi-ai-session-affinity-headers.md: 7ab063ff0e383d4f904ae663d2121dd5ea7b2029
-2026-09-10-pi-ai-session-affinity-headers.zh.md: 4d9331a4a16a3ef230d83f9a34ff0a79ffa85ebc
+2026-09-10-pi-ai-session-affinity-headers.md: c310f2d66222f7986e6e473b005e5c7acdb4376f
+2026-09-10-pi-ai-session-affinity-headers.zh.md: a7953db955e3d6d6ba5c806f9c65fec8f15efc8d
