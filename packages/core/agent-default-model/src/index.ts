@@ -103,8 +103,6 @@ export class AgentDefaultModelConfig extends Service {
 
   private source: () => AgentDefaultModelSettings
   private effortsSource: () => AgentModelEffortsSettings
-  /** Serializes read-compute-replace so concurrent route writes cannot lose one another. */
-  private effortWriteTail: Promise<void> = Promise.resolve()
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'agentDefaultModel')
@@ -177,20 +175,13 @@ export class AgentDefaultModelConfig extends Service {
    * @param effort - the explicitly chosen effort, or undefined to clear.
    * @returns fulfillment after the optional settings write settles.
    */
-  rememberEffort(provider: string, model: string, effort: ReasoningEffortId | undefined): Promise<void> {
-    const operation = async (): Promise<void> => {
-      const settings = this.ctx.get('settings')
-      if (settings === undefined) return
-      await settings.replace(AGENT_MODEL_EFFORTS_SETTINGS_NAMESPACE, {
-        entries: [
-          ...this.effortsSource().entries.filter(entry => entry.provider !== provider || entry.model !== model),
-          ...effort === undefined ? [] : [{ provider, model, effort: String(effort) }],
-        ],
-      })
-    }
-    const run = this.effortWriteTail.then(operation, operation)
-    this.effortWriteTail = run.then(() => undefined, () => undefined)
-    return run
+  async rememberEffort(provider: string, model: string, effort: ReasoningEffortId | undefined): Promise<void> {
+    await this.ctx.get('settings')?.replace(AGENT_MODEL_EFFORTS_SETTINGS_NAMESPACE, {
+      entries: [
+        ...this.effortsSource().entries.filter(entry => entry.provider !== provider || entry.model !== model),
+        ...effort === undefined ? [] : [{ provider, model, effort: String(effort) }],
+      ],
+    })
   }
 }
 

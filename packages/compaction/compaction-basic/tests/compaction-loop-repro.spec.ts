@@ -91,7 +91,7 @@ class OverflowRecoveryAdapter extends LlmAdapter {
       provider,
       id: model,
       name: model,
-      context: { contextWindow: provider === 'summary' ? 100_000 : 128 },
+      context: { contextWindow: 100_000 },
     })
   }
 
@@ -391,15 +391,13 @@ describe('context-overflow recovery across the real loop and compaction-basic', 
       await mountInvariants(ctx)
       await ctx.plugin(AgentLoop, { agents: [] })
       await ctx.plugin(TokenMeter)
-      ctx.llm.registerAdapter(['mock', 'summary'], adapter)
+      ctx.llm.registerAdapter(['mock'], adapter)
       ctx.on('agent/request', async (_payload, next) => ({
         ...await next(), provider: 'mock', model: 'mock',
       }))
       await ctx.plugin(BasicCompactionEngine, {
         thresholdRatio: 1,
         retainTokens: 100,
-        summarizationProvider: 'summary',
-        summarizationModel: 'summary',
         maxTokens: 64,
         compactionRetries: 0,
         maxOverflowRetries: 1,
@@ -472,12 +470,10 @@ describe('context-overflow recovery across the real loop and compaction-basic', 
     await ctx.plugin(LlmRetry)
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(TokenMeter)
-    ctx.llm.registerAdapter(['mock', 'summary'], adapter)
+    ctx.llm.registerAdapter(['mock'], adapter)
     await ctx.plugin(BasicCompactionEngine, {
       thresholdRatio: 1,
       retainTokens: 100,
-      summarizationProvider: 'summary',
-      summarizationModel: 'summary',
       maxTokens: 64,
       compactionRetries: 0,
       maxOverflowRetries: 1,

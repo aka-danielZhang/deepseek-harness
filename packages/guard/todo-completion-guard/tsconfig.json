@@ -21,7 +21,7 @@
       "path": "../../llm/llm"
     },
     {
-      "path": "../../todo/tool-todo"
+      "path": "../../runtime-diagnostics/invariants"
     }
   ]
 }

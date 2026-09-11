@@ -1,7 +1,7 @@
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { childCloseExitCode, logStamp, resolveLogDir } from '../src/web-log.ts'
+import { logStamp, resolveLogDir } from '../src/web-log.ts'
 
 describe('resolveLogDir', () => {
   it('lets DSH_WEB_LOG_DIR win over both variants', () => {
@@ -15,16 +15,6 @@ describe('resolveLogDir', () => {
     expect(resolveLogDir({}, false)).toBe(join(homedir(), '.dsh', 'logs'))
     expect(resolveLogDir({ TMPDIR: '/var/tmp' }, true)).toBe(join('/var/tmp', 'dsh-web-logs'))
     expect(resolveLogDir({}, true)).toBe(join(tmpdir(), 'dsh-web-logs'))
-  })
-})
-
-describe('childCloseExitCode', () => {
-  it('preserves exit codes and maps signals to shell statuses', () => {
-    expect(childCloseExitCode(0, null)).toBe(0)
-    expect(childCloseExitCode(7, null)).toBe(7)
-    expect(childCloseExitCode(null, 'SIGINT')).toBe(130)
-    expect(childCloseExitCode(null, 'SIGTERM')).toBe(143)
-    expect(childCloseExitCode(null, null)).toBe(1)
   })
 })
 

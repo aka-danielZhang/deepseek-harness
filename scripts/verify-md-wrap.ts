@@ -22,10 +22,7 @@ const PATTERNS = [
   'docs/**/*.md',
   'packages/*/*.md',
   'packages/*/*/*.md',
-  // ACP reuses canonical session expectations through file symlinks. Node's
-  // recursive fs.glob treats those matching symlinks as directories, so scan
-  // the three real snapshot families and avoid duplicate aliases up front.
-  'snapshots/{sdk,session,web}/**/system-prompt.expected.md',
+  'snapshots/**/system-prompt.expected.md',
   'packages/**/system-prompt.expected.md',
   'AGENTS.md',
   'packages/AGENTS.md',

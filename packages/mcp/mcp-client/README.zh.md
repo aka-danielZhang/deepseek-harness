@@ -91,7 +91,7 @@ kind: "package-reference"
 |---|---|---|
 | `mcp-client/status` | emit | `serverName`、`status: 'connecting' \| 'connected' \| 'reconnecting' \| 'failed' \| 'disposed'`、`toolCount` |
 
-在每个监督器提交点发布：尝试开始（`connecting`）、连接与初始同步完成（`connected`）、退避已武装（`reconnecting`）、放弃／禁用重连后的丢失／从未关闭的失败世代（`failed`），以及处置（`disposed`）。完成的工具同步也会重发当前状态，因为 `toolCount` 会在状态不变时变化——包括排队的注销跑完后第二次带 `toolCount: 0` 的 `failed`／`disposed`。事件通过共享 Cordis 事件总线发布。`serverName` 只在一个注册作用域内唯一；若观察者允许独立 Agent 作用域复用同名实例，就需要自行携带额外身份。监听器按约定同步执行：同步抛错由发射方收容并记日志，异步工作则必须自行处理 rejection。仅靠 fiber 生命周期无法代替此事件：在 `failOnStartupError: false` 时，失败的服务器仍会在重连循环里到达 `active` fiber。
+在每个监督器提交点发布：尝试开始（`connecting`）、连接与初始同步完成（`connected`）、退避已武装（`reconnecting`）、放弃／禁用重连后的丢失／从未关闭的失败世代（`failed`），以及处置（`disposed`）。完成的工具同步也会重发当前状态，因为 `toolCount` 会在状态不变时变化——包括排队的注销跑完后第二次带 `toolCount: 0` 的 `failed`／`disposed`。发出该事件的 fiber 上下文及其每个祖先都通过共享 Cordis 事件总线观察它；`serverName` 用来区分并发实例。监听器失败由发射方收容并记日志，因此观察者缺陷不会打断监督器。仅靠 fiber 生命周期无法代替此事件：在 `failOnStartupError: false` 时，失败的服务器仍会在重连循环里到达 `active` fiber。
 
 ### 启动、工具更新与重连
 

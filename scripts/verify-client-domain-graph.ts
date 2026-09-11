@@ -2,8 +2,8 @@
  * Enforce intra-package domain layering inside `packages/client/*\/src/client/`.
  * verify-module-graph covers package-level edges; this gate covers the
  * directory level: domain directories may import `contract/` and never each
- * other, and only a declared assembly point (`apply.ts` / `index.ts`, plus a
- * small explicit composite-view set) may import across domains.
+ * other, and only the assembly point (`apply.ts` / `index.ts`) may import
+ * across domains.
  *
  * Layer model (lower may not import higher):
  *   0  contract/            shared contract API (types + slot declarations)
@@ -24,10 +24,6 @@ const CLIENT_DIR = join(root, 'packages/client')
 const CONTRACT_DIRS = new Set(['contract'])
 /** Top-level client files allowed to import across domains (assembly layer). */
 const ASSEMBLY_FILES = new Set(['apply.ts', 'index.ts', 'index.tsx'])
-/** Package-local composite views that are intentionally also assembly points. */
-const DOMAIN_ASSEMBLY_FILES = new Set([
-  'ui-conversation/skeleton/InputBar.tsx',
-])
 
 interface Violation { file: string; imported: string; reason: string }
 
@@ -60,8 +56,7 @@ function checkPackage(pkgName: string, clientDir: string): Violation[] {
   const files = listSources(clientDir)
   for (const rel of files) {
     const fromDomain = domainOf(rel)
-    const isAssembly = (fromDomain === '' && ASSEMBLY_FILES.has(rel))
-      || DOMAIN_ASSEMBLY_FILES.has(`${pkgName}/${rel}`)
+    const isAssembly = fromDomain === '' && ASSEMBLY_FILES.has(rel)
     if (isAssembly) continue
     const source = readFileSync(join(clientDir, rel), 'utf8')
     for (const match of source.matchAll(/from\s+['"](\.[^'"]+)['"]/g)) {

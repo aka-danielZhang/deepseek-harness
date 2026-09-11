@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The `guard/` group watches common failure patterns in the agent loop. `repeat-tool-reminder` nudges a model that repeats an identical tool call without progress. `timeout-policy` gives declared tool deadlines a clear timed-out result instead of stalling the session. `todo-completion-guard` gives a closing turn one chance to reconcile unfinished plan items. All three ship enabled in the `dsh` base bundle; a composition can tune or remove them.
+The `guard/` group keeps the agent loop productive by watching for common failure patterns. `repeat-tool-reminder` notices when the model repeats the exact same tool call and reminds it to change approach or finish, so a stuck loop stops burning time and tokens. `timeout-policy` puts a time limit on tool calls that declare one, so a hung call returns a clear timed-out error to the model instead of stalling the session. `todo-completion-guard` steers one advisory notice when a turn is about to close while its standing todo list still has unfinished items. All three ship enabled in the `dsh` base bundle; a composition can tune or remove them.
 
 ## Table of Contents
 

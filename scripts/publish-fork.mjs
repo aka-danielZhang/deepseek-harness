@@ -5,9 +5,8 @@
  * upstream must reach consumers as a published npm version; downstream
  * repos consume npm only. This script materializes that policy:
  *
- * - select the changed packages (git diff against an explicit --upstream-ref,
- *   or the HEAD/upstream-master merge base by default; --all selects every
- *   @deepseek-ai/* package);
+ * - select the changed packages (git diff upstream/master..master, or the
+ *   --all flag for every @deepseek-ai/* package);
  * - rewrite each package.json into a staging copy: scope @deepseek-ai →
  *   the fork scope, version → <upstream>.zw.<N>, cross-references between
  *   fork dependencies retain import names with npm aliases to the fork;
@@ -15,9 +14,9 @@
  *   from the real tree, so the staging copy packs against live deps);
  * - publish each tarball to the registry with the given dist-tag.
  *
- * Usage: node scripts/publish-fork.mjs <zw-number> --base <version> --upstream-ref <git-ref> [--dist-tag next]
- *        node scripts/publish-fork.mjs <zw-number> --dry-run --upstream-ref <git-ref>
- *        node scripts/publish-fork.mjs --list --upstream-ref <git-ref>
+ * Usage: node scripts/publish-fork.mjs <zw-number> [--dist-tag latest]
+ *        node scripts/publish-fork.mjs <zw-number> --dry-run
+ *        node scripts/publish-fork.mjs --list
  *
  * Auth: NODE_AUTH_TOKEN (or a logged-in local npm). GitHub Actions calls
  * this script from .github/workflows/npm-release.yml.
@@ -59,25 +58,9 @@ function workspacePackages() {
   return map
 }
 
-/**
- * Resolve the exact commit used to select fork-modified packages.
- * An explicit ref must already be merged into HEAD; this prevents a typo or
- * unrelated release tag from turning the snapshot diff into a false package set.
- */
-export function resolveDiffBase(upstreamRef, git = args => run('git', args)) {
-  if (upstreamRef === undefined) return git(['merge-base', 'HEAD', 'upstream/master']).trim()
-  const base = git(['rev-parse', '--verify', `${upstreamRef}^{commit}`]).trim()
-  try {
-    git(['merge-base', '--is-ancestor', base, 'HEAD'])
-  } catch {
-    throw new Error(`publish-fork: upstream ref ${upstreamRef} (${base}) is not an ancestor of HEAD`)
-  }
-  return base
-}
-
-/** The fork-modified package set: source dirs of the diff vs an immutable baseline. */
-function changedPackages(all, upstreamRef) {
-  const base = resolveDiffBase(upstreamRef)
+/** The fork-modified package set: source dirs of the diff vs upstream. */
+function changedPackages(all) {
+  const base = run('git', ['merge-base', 'HEAD', 'upstream/master']).trim()
   const files = run('git', ['diff', '--name-only', base, 'HEAD']).split('\n')
   // Source-only filter: composition ymls and docs change without a publish
   // obligation; a package joins the set only when its src/ (or the package
@@ -123,16 +106,12 @@ export function rewriteManifest(pkgJson, name, version, versionOf, stagingPath, 
     if (deps === undefined) continue
     for (const [dep, spec] of Object.entries(deps)) {
       if (versionOf.has(dep)) {
-        // Fork-modified deps alias to @crazx in EVERY field, peers included:
-        // npm/pnpm both accept `npm:<pkg>@<version>` peer specs, and the
-        // alias is the only spec that actually resolves — a bare zw version
-        // under the official @deepseek-ai name exists only as @crazx, so
-        // consumers that do not pre-provide the peer explode under
-        // auto-install-peers (the zw.1 dsh-agent-default-model incident:
-        // @crazx/dsh-api-session-controller's peer made plain installs of
-        // bridge-style consumers unsatisfiable).
+        // Peers require semver, not npm aliases; the host supplies the same
+        // fork instance under its original import name.
         const targetVersion = versionOf.get(dep)
-        deps[dep] = `npm:${FORK_SCOPE}/${dep.slice(UPSTREAM_SCOPE.length + 1)}@${targetVersion}`
+        deps[dep] = field === 'peerDependencies'
+          ? targetVersion
+          : `npm:${FORK_SCOPE}/${dep.slice(UPSTREAM_SCOPE.length + 1)}@${targetVersion}`
       } else if (typeof spec === 'string' && spec.startsWith('workspace:')) {
         // Non-fork workspace dep: keep the protocol's range shape against the
         // TARGET package's real published version — vendor-line packages
@@ -165,12 +144,6 @@ async function main() {
   const dryRun = args.includes('--dry-run')
   const distTagIdx = args.indexOf('--dist-tag')
   const distTag = distTagIdx !== -1 ? args[distTagIdx + 1] : 'latest'
-  const upstreamRefIdx = args.indexOf('--upstream-ref')
-  const upstreamRef = upstreamRefIdx !== -1 ? args[upstreamRefIdx + 1] : undefined
-  if (upstreamRefIdx !== -1 && (upstreamRef === undefined || upstreamRef.startsWith('--'))) {
-    console.error('publish-fork: --upstream-ref needs a git ref')
-    process.exit(1)
-  }
   const zw = args.find(a => /^\d+$/.test(a))
 
   const all = workspacePackages()
@@ -181,7 +154,7 @@ async function main() {
   for (const [nme, dir] of all) {
     workspaceVersions.set(nme, JSON.parse(readFileSync(resolve(dir, 'package.json'), 'utf8')).version)
   }
-  const selected = args.includes('--all') ? [...all.keys()] : changedPackages(all, upstreamRef)
+  const selected = args.includes('--all') ? [...all.keys()] : changedPackages(all)
 
   if (listOnly) {
     console.log(`fork-modified packages (${selected.length}):`)

@@ -12,7 +12,21 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import type { TodoItem } from '@deepseek-ai/dsh-tool-todo/types'
+
+/**
+ * Standing-plan row. Same fields as `@deepseek-ai/dsh-tool-todo`'s `TodoItem`.
+ * Declared here so this overlay does not import the tool plugin's host face.
+ */
+interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
+declare module '@deepseek-ai/dsh-session/types' {
+  interface SessionEventMap {
+    'todo/write': { todos: TodoItem[] }
+  }
+}
 
 export const name = 'todo-completion-guard'
 

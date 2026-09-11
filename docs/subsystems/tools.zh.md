@@ -581,18 +581,17 @@ Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index
 
 #### `mcp-client/status` — emit
 
-One MCP server connection reached a new committed state, or its live tool registration count changed. Emitted only after the supervisor mutated its state, never before, on the shared Cordis event bus. `serverName` is unique only inside its registration scope; deployments that reuse a name across Agent scopes need an additional observer-owned identity. Listeners are synchronous by contract. A synchronous listener throw is logged and contained by the emitter; async work must contain its own rejection.
+One MCP server connection reached a new committed state, or its live tool registration count changed. Emitted only after the supervisor mutated its state, never before. The emitting fiber's context and every ancestor context observe this through the shared event bus; `serverName` disambiguates concurrent instances. Listener failures are contained and logged by the emitter, so an observer defect cannot disrupt the supervisor's own state machine.
 
 ```ts cordis-catalog
 /**
  * One MCP server connection reached a new committed state, or its live
  * tool registration count changed. Emitted only after the supervisor
- * mutated its state, never before, on the shared Cordis event bus.
- * `serverName` is unique only inside its registration scope; deployments
- * that reuse a name across Agent scopes need an additional observer-owned
- * identity. Listeners are synchronous by contract. A synchronous listener
- * throw is logged and contained by the emitter; async work must contain its
- * own rejection.
+ * mutated its state, never before. The emitting fiber's context and every
+ * ancestor context observe this through the shared event bus; `serverName`
+ * disambiguates concurrent instances. Listener failures are contained and
+ * logged by the emitter, so an observer defect cannot disrupt the
+ * supervisor's own state machine.
  * @param serverName - the configured namespace of the emitting instance.
  * @param status - the connection state at this commit point.
  * @param toolCount - number of tools this server currently has registered on `ctx.tools`.

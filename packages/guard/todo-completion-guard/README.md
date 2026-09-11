@@ -1,125 +1,35 @@
----
-description: "Advisory turn-end guard that reminds a model about unfinished todo items, for users and maintainers choosing, composing, or debugging the plugin."
-kind: "package-reference"
----
-
 # @deepseek-ai/dsh-todo-completion-guard
 
 English | [中文](README.zh.md)
 
-## Summary
+An advisory turn-end guard, not a model-facing tool: it never appears in the tool list, never vetoes a turn, and adds exactly one behavior — when an otherwise completed turn is about to close while its standing todo list still has unfinished items, it steers one plugin-notice into the same turn telling the model to finish and check off the items, rewrite the list around a deliberate drop, or state explicitly why the list stays open. Whether to comply stays entirely with the model; the guard advises once per turn and never loops. Decision record: [the todo-completion-guard Agent Note](../../../.agents/notes/implemented/feature/2026-08-19-todo-completion-guard.md).
 
-This package gives a model one last chance to reconcile unfinished todo items before an otherwise completed turn closes. It steers one source-attributed reminder into the same turn, then lets the model finish the items, rewrite the list around a deliberate deferral, or explain why work remains open. It never vetoes completion and never loops. Choose it for autonomous sessions that use `todo_write`; leave it out when an open list must never trigger another model step.
+## When it fires
 
-## Table of Contents
+The guard listens on `agent/turn-stopping`, the boundary the loop broadcasts just before closing an otherwise completed turn (the same seam the Claude Code Stop hook rides). A steered message makes the loop observe pending input and run another step of the same turn.
 
-- [Use this package](#use-this-package)
-- [Understand the implementation](#understand-the-implementation)
-- [Further Exploration](#further-exploration)
-- [Model Experience](#model-experience)
-- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
-- [Dev Note](#dev-note)
+At that boundary it inspects the current turn's events:
 
------
+- **Standing list** — the latest `todo/write` after the current turn's own `turn/start`, matching the todo projection's clearing rule. A list written in an earlier turn is already cleared by that rule and is never nagged about; a turn that writes no list is invisible to the guard.
+- **Unfinished means not `completed`** — both `pending` and `in_progress` count. A forgotten `pending` item is exactly the residue this guard exists for.
+- **Exempt: wall-bounded turns.** If any step of the turn finished on `max-tokens` (a sticky turn outcome), the guard stays quiet — forcing another step would most likely hit the same output ceiling again and burn the request for nothing.
+- **Once per agent per turn.** A steered turn that still ends with an open list is allowed to end: the reminder names the exits (complete, rewrite with a one-line reason, or declare the deferral), and a model that chooses to keep the list open heard the reminder once. This is the guard's own loop cap; the loop itself has none.
 
-<a id="use-this-package"></a>
-## Use this package
+## The reminder
 
-The `dsh` base bundle already mounts this guard beside `tool-todo`; custom compositions can mount the same configuration-free row.
+One `notice`-form context message, source `{kind: 'plugin', plugin: 'todo-completion-guard'}`, steered into the turn and appended as a logged `user/message` — model-visible, source-attributed, and reconstructable from the session log with no new session event. It lists every unfinished item with its status, then names the three exits. The decision — finish, rewrite, or keep with an explicit statement — stays with the model: a legitimately deferred list (work continuing next turn, waiting for the user) is delayed by nothing and blocked by nothing.
 
-### When to choose it
-
-Choose it when an agent plans multi-step work with `todo_write` and an accidentally open list should prompt one reconciliation step. Avoid it when a turn must close immediately regardless of plan state, or when todo events come from a custom vocabulary rather than `@deepseek-ai/dsh-tool-todo`.
-
-### Minimal configuration
+## Composition
 
 ```yaml
-- name: '@deepseek-ai/dsh-todo-completion-guard'
+- id: todo-completion-guard
+  name: '@deepseek-ai/dsh-todo-completion-guard'
 ```
 
-The package has no configuration fields. Reminder wording, the once-per-turn cap, and the max-token exemption are correctness properties rather than deployment knobs. Without `tool-todo`, no `todo/write` event exists and the guard stays inert.
-
-### What happens at turn end
-
-At `agent/turn-stopping`, the guard reads the latest `todo/write` after the current `turn/start`. Both `pending` and `in_progress` items count as unfinished. If the turn has not hit its output-token ceiling, the guard steers one reminder and the loop observes pending input for another step. A second stop in the same turn is allowed without another reminder.
-
------
-
-<a id="understand-the-implementation"></a>
-## Understand the implementation
-
-<details>
-<summary>Implementation internals — click to expand</summary>
-
-The implementation consumes the `TodoItem` and `todo/write` declarations from `@deepseek-ai/dsh-tool-todo`, so the event vocabulary has one owner. It scans an immutable `Session.snapshotEvents()` view and limits inspection to the current turn.
-
-A turn is wall-bounded when an `assistant/message` or `assistant/attempt` stream ends with `max-tokens`. That outcome suppresses the reminder because another step is likely to hit the same ceiling. A `WeakMap<Agent, turn>` provides the once-per-turn limit without retaining disposed agents.
-
-The reminder is a plugin-sourced `user/message` with `form: 'notice'`. It is appended through normal steering, remains attributable in the log, and does not invent a package-specific session event. No runtime invariant companion is published; this stateless advisory owns no independent mutable relation or event stream beyond the turn-stopping listener it evaluates.
-
-### Source map
-
-| File | Role |
-|---|---|
-| [`src/index.ts`](src/index.ts) | Current-turn inspection, wall-bound detection, reminder construction, and listener registration |
-| [`tests/todo-completion-guard.spec.ts`](tests/todo-completion-guard.spec.ts) | Complete, unfinished, max-token, and once-per-turn behavior |
-
-</details>
-
------
-
-<a id="further-exploration"></a>
-## Further Exploration
-
-- [Todo tool package](../../todo/tool-todo/README.md) — owner of `TodoItem`, `todo/write`, and whole-list replacement semantics.
-- [Tools subsystem reference](../../../docs/subsystems/tools.md) — tool execution and model-facing context ownership.
-- [Todo completion decision](../../../.agents/notes/implemented/feature/2026-08-19-todo-completion-guard.md) — rationale and rejected enforcement alternatives.
-- [guard group map](../README.md) — sibling loop-hygiene policies.
-
------
-
-<a id="model-experience"></a>
-## Model Experience
-
-### Unfinished-list reminder
-
-#### What the model sees
-
-When a turn would otherwise finish with open items, the model receives one source-attributed context message. The item lines preserve current list order and status.
-
-##### Reminder template
-
-```markdown
-The todo list still has <count> unfinished item(s) while this turn is about to end:
-- [<pending|in_progress>] <item content>
-Before finishing the reply: complete the remaining item(s) and mark them completed with todo_write; or, if items are genuinely dropped or deferred, rewrite the list to reflect that and say why in one line. If the work legitimately continues in a later turn or you are blocked waiting for the user, state that explicitly in the reply and the list may stay as is.
-```
-
-#### Token effect
-
-Zero tokens when no current-turn list is open or the turn is wall-bounded. When triggered, one bounded instruction plus every unfinished item enters retained history.
-
-#### KV Cache effect
-
-Append-only. The reminder follows the reusable request prefix and does not rewrite earlier model input.
+No configuration: every knob this guard would expose (reminder text, per-turn cap, exemptions) is a correctness property of the advisory contract, not a deployment choice. It is a consumer of the `todo/write` event vocabulary; mounting it without `tool-todo` in the composition is inert (no turn ever writes the event).
 
 ## Known Limitations and Deferred Work
 
-<a id="known-limitations-and-deferred-work"></a>
-
-These limits define the advisory contract rather than a backlog of enforcement work.
-
-- **Advisory only** — a model may acknowledge the reminder and still leave items open; the guard never forces another continuation.
-- **One live-process budget** — a process restart recreates the `WeakMap`, so a turn spanning a restart may receive another reminder.
-- **Per-agent visibility** — a child's unfinished list never steers its parent; each agent reconciles its own session log.
-- **No configurable wording or thresholds** — changing those semantics requires changing and testing the package contract.
-
-<a id="dev-note"></a>
-### Dev Note
-
-<details>
-<summary>Working context for maintainers — click to expand</summary>
-
-None.
-
-</details>
+- **Advisory only** — a model that acknowledges the reminder and still leaves the list open ends the turn after one nudge; escalating to forced continuation is rejected (that is a `TODO(stop-loop-guard)` policy for the loop, not this guard).
+- **In-memory throttle** — the once-per-turn state is a `WeakMap` over the live agent; a session resumed from persistence gets a fresh budget, which only matters for a turn that spans a process restart.
+- **Subagent lists are invisible by design** — the guard reads each agent's own session log; a child's unfinished list never steers the parent (the parent's own list reflects delegated work as it sees it).

@@ -191,12 +191,8 @@ export function frameSummary(summary: readonly ContentBlock[]): ContentBlock[] {
   ]
 }
 
-/**
- * Map a terminal summarization finish to its fail-closed error.
- * @param finish - terminal stream finish emitted by the summary request.
- * @returns the corresponding error, or `undefined` for a complete stop.
- */
-export function finishError(finish: FinishReason): Error | undefined {
+/** Map a terminal summarization finish to its fail-closed error. */
+function finishError(finish: FinishReason): Error | undefined {
   switch (finish.kind) {
     case 'error':
     case 'aborted': {
@@ -214,12 +210,8 @@ export function finishError(finish: FinishReason): Error | undefined {
   }
 }
 
-/**
- * Reject visual output and keep only text before synthesizing a user message.
- * @param blocks - raw content blocks emitted by the summary request.
- * @returns the text-only blocks safe to persist as a compaction checkpoint.
- */
-export function summaryText(
+/** Reject visual output and keep only text before synthesizing a user message. */
+function summaryText(
   blocks: readonly ContentBlock[],
 ): Array<Extract<ContentBlock, { type: 'text' }>> {
   if (contentHasImage(blocks)) {

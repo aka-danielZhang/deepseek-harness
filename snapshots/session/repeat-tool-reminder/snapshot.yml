@@ -5,5 +5,3 @@ composition: default
 recording: authored
 header:
   class: default
-replay:
-  override: true

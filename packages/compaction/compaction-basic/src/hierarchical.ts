@@ -4,11 +4,14 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import {
   BlockAssembler,
+  contentHasImage,
   CONTEXT_WINDOW_EXCEEDED_CODE,
   createUserMessage,
+  LlmError,
 } from '@deepseek-ai/dsh-llm'
 import type {
   ContentBlock,
+  FinishReason,
   GenerateOptions,
   Message,
   TokenUsage,
@@ -18,7 +21,7 @@ import type {
   ResolvedHierarchyConfig,
   ResolvedTargetPolicy,
 } from './types.ts'
-import { COMPACTION_INSTRUCTION, finishError, summaryText } from './summarizer.ts'
+import { COMPACTION_INSTRUCTION } from './summarizer.ts'
 import type { SummarizationInput, SummaryResult } from './summarizer.ts'
 import {
   estimateMessages,
@@ -58,13 +61,6 @@ interface SourceSpan {
   readonly messages: Message[]
   readonly start: number
   readonly end: number
-}
-
-interface HierarchyReplay {
-  /** The current surface system head replayed once at the front of every stage. */
-  readonly systemHead?: Message
-  /** Chronological selected history, including any later dynamic system messages. */
-  readonly sourceMessages: readonly Message[]
 }
 
 interface PartialSummary {
@@ -146,10 +142,8 @@ class HierarchicalSummarizer {
     }
 
     const estimate = (message: Message): number => this.ctx.tokenMeter.estimateMessage(message)
-    const replay = hierarchyReplay(input.messages)
     const oneShotTokens = this.estimateCallInput(
       input,
-      replay,
       COMPACTION_INSTRUCTION,
       true,
       estimate,
@@ -177,7 +171,6 @@ class HierarchicalSummarizer {
     const totalUnits = units.length
     const mapReserve = this.estimateFixedInput(
       input,
-      replay.systemHead,
       mapInstruction(totalUnits, totalUnits, totalUnits),
       this.hierarchy.replayTools,
       estimate,
@@ -244,7 +237,6 @@ class HierarchicalSummarizer {
       }
       const reduceReserve = this.estimateFixedInput(
         input,
-        replay.systemHead,
         reduceInstruction(round, totalUnits, totalUnits, totalUnits),
         this.hierarchy.replayTools,
         estimate,
@@ -461,7 +453,6 @@ class HierarchicalSummarizer {
   /** Price a complete auxiliary call input. */
   private estimateCallInput(
     input: SummarizationInput,
-    replay: HierarchyReplay,
     instruction: string,
     includeTools: boolean,
     estimate: (message: Message) => number,
@@ -471,10 +462,9 @@ class HierarchicalSummarizer {
       + estimateMessages(sourceMessages, estimate)
   }
 
-  /** Price the repeated system head, optional tools, and final stage instruction. */
+  /** Price the repeated header and final instruction for one stage. */
   private estimateFixedInput(
     input: SummarizationInput,
-    systemHead: Message | undefined,
     instruction: string,
     includeTools: boolean,
     estimate: (message: Message) => number,
@@ -501,8 +491,6 @@ class HierarchicalSummarizer {
   /** Run one private map or reduce model call and require structured text. */
   private async runStage(
     input: SummarizationInput,
-    messages: readonly Message[],
-    systemHead: Message | undefined,
     instruction: string,
     target: SummaryTarget,
     maxTokens: number,
@@ -526,7 +514,10 @@ class HierarchicalSummarizer {
     if (finishFailure !== undefined) throw finishFailure
 
     const rawOutput = assembler.blocks()
-    const summary = summaryText(rawOutput)
+    if (contentHasImage(rawOutput)) {
+      throw new LlmError('hierarchical compaction summary cannot contain image output', 'UNSUPPORTED_CONTENT')
+    }
+    const summary = rawOutput.filter((block): block is TextBlock => block.type === 'text')
     validateStructuredSummary(summary, 'hierarchical compaction stage')
     return {
       summary,
@@ -558,13 +549,6 @@ class HierarchicalSummarizer {
   }
 }
 
-/** Separate the fixed surface system head from chronological source history. */
-function hierarchyReplay(messages: readonly Message[]): HierarchyReplay {
-  const [first, ...rest] = messages
-  if (first?.role === 'system') return { systemHead: first, sourceMessages: rest }
-  return { sourceMessages: messages }
-}
-
 /** Build the terminal diagnostic for a provider-rejected atomic span. */
 function indivisibleOverflow(stage: string, cause: unknown): Error {
   const error = new OversizedCompactionUnitError(
@@ -581,6 +565,27 @@ function hasErrorCode(error: unknown, code: string): boolean {
     && error !== null
     && 'code' in error
     && error.code === code
+}
+
+/** Map a terminal stage finish to a fail-closed error. */
+function finishError(finish: FinishReason): Error | undefined {
+  switch (finish.kind) {
+    case 'error':
+    case 'aborted': {
+      const error = new Error(finish.failure.message) as Error & { code?: string }
+      error.code = finish.failure.code
+      return error
+    }
+    case 'max-tokens': {
+      const error = new Error(
+        'hierarchical compaction stage truncated at the token cap',
+      ) as Error & { code?: string }
+      error.code = 'MAX_TOKENS'
+      return error
+    }
+    default:
+      return undefined
+  }
 }
 
 /**

@@ -20,8 +20,8 @@ on:
         required: true
         type: string
       base:
-        description: 'upstream baseline (e.g. 0.1.5-alpha.1); also selects immutable tag dsh-v<baseline>'
-        required: true
+        description: 'optional upstream baseline to assert (e.g. 0.1.0-rc.8); omit for the common-base drift check'
+        required: false
         type: string
 
 jobs:
@@ -34,10 +34,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fetch upstream baselines
-        # Fetch release tags as immutable package-selection baselines. The
-        # workflow passes the tag explicitly instead of diffing a moving branch.
-        run: git remote add upstream https://github.com/deepseek-ai/deepseek-harness.git && git fetch upstream master --tags || true
+      - name: Fetch upstream for the diff base
+        # Full master history: publish-fork derives the changed set from
+        # `git merge-base HEAD upstream/master`, which needs the connecting
+        # ancestry a depth-1 fetch would not provide.
+        run: git remote add upstream https://github.com/deepseek-ai/deepseek-harness.git && git fetch upstream master || true
 
       - uses: pnpm/action-setup@v4
 
@@ -57,19 +58,18 @@ jobs:
         run: |
           base_args=""
           if [ -n "${{ inputs.base }}" ]; then
-            # Manual dispatch pins both the manifest baseline and immutable Git tag.
-            base_args="--base ${{ inputs.base }} --upstream-ref dsh-v${{ inputs.base }}"
+            # Manual dispatch may pin the baseline explicitly.
+            base_args="--base ${{ inputs.base }}"
           elif [ -z "${{ inputs.zw }}" ]; then
             # Tag push: the tag itself spells v<base>+zw.<N>; pass the base so
-            # publish-fork can fail loud on tag/manifest drift and computes the
-            # package set from that exact upstream release tag.
+            # publish-fork can fail loud on tag/manifest drift.
             tag="${GITHUB_REF_NAME}"
             base="${tag%+zw.*}"
             case "$base" in
               v?*) base="${base#v}" ;;
               *) echo "tag $tag carries no baseline"; exit 1 ;;
             esac
-            base_args="--base $base --upstream-ref dsh-v$base"
+            base_args="--base $base"
           fi
           if [ -n "${{ inputs.zw }}" ]; then
             echo "n=${{ inputs.zw }}" >> "$GITHUB_OUTPUT"
@@ -91,7 +91,7 @@ jobs:
           # up (the env var alone is not consulted for a bare `npm publish`
           # from a package cwd).
           echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > "$HOME/.npmrc"
-          # shellcheck disable=SC2086 -- base-args is a controlled, space-free option tuple
+          # shellcheck disable=SC2086 -- base-args is a controlled, space-free pair
           node scripts/publish-fork.mjs "${{ steps.zw.outputs.n }}" ${{ steps.zw.outputs.base-args }}
 
       - name: Release notes

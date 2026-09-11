@@ -11,6 +11,13 @@ English | [中文](README.zh.md)
 
 `dsh-agent-default-model` gives newly created agents a shared default provider and model when their sessions do not specify one. Use it to choose the starting model once for all supported agent entry points, including `dsh --profile headless`. When settings are available, users can override the configured selection, including reasoning effort, and saved changes apply to subsequent reads. The default is process-wide; per-session model selection remains the responsibility of the entry point that creates the agent.
 
+- `ctx.agentDefaultModel.currentSelection()` returns a detached `{ provider, model, reasoningEffort? }` selection for a newly created Agent.
+- `ctx.agentDefaultModel.saveSelection(selection)` saves the complete user selection. Without a settings provider it is a no-op and the composition entry remains current.
+- `ctx.agentDefaultModel.recallEffort(provider, model)` returns the reasoning effort the user last explicitly chose on that route, or `undefined`.
+- `ctx.agentDefaultModel.rememberEffort(provider, model, effort?)` records — or, when `effort` is `undefined`, clears — that route's remembered effort. Without a settings provider it is a no-op.
+
+The remembered efforts live in the separate `agent-model-efforts` Settings section (an entry list keyed by provider/model), so switching the default selection never overwrites them. The service stores what it is told; the consumer that consults a memory validates it against the live model capability, because a remembered level can outlive the declaration that offered it.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)
@@ -56,8 +63,6 @@ await ctx.agentDefaultModel.saveSelection({ provider, model, reasoningEffort: 'h
 
 Without a settings provider, `saveSelection()` is a no-op and the composition entry remains current. The service does not validate catalog membership: a provider route may serve an unadvertised model, and the consumer that opens a model request owns availability diagnostics.
 
-`recallEffort(provider, model)` reads the last explicit effort for one route. `rememberEffort(provider, model, effort?)` records it or clears it when `effort` is `undefined`; these entries live in the separate `agent-model-efforts` Settings section and never overwrite the default selection. Consumers validate a recalled value against live model capabilities before using it.
-
 -----
 
 <a id="understand-the-implementation"></a>
@@ -76,12 +81,12 @@ The service is a composition entry with a settings-backed source. The plugin con
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: `AgentDefaultModelConfig` service, settings section install, default selection access, and per-route effort memory |
+| [`src/index.ts`](src/index.ts) | Plugin entry: `AgentDefaultModelConfig` service, settings section install, `currentSelection`/`saveSelection` |
 | — | No runtime invariant companion is published; settings validation owns the only mutable-value relationship. |
 
 ### Behavior notes
 
-The four public methods are thin reads and writes over those sources. `currentSelection()` returns a fresh detached object so a caller can hold it without aliasing service state, and `saveSelection()` writes the whole default selection through `ctx.settings` when present. Effort-memory writes serialize their complete read-compute-replace operation; concurrent selections on different routes therefore preserve both entries, and one failed write does not poison later writes.
+Both public methods are thin reads and writes over that source: `currentSelection()` returns a fresh detached object so a caller can hold it without aliasing service state, and `saveSelection()` writes the whole selection through `ctx.settings` when present.
 
 </details>
 

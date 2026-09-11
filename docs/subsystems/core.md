@@ -457,7 +457,7 @@ recallEffort(provider: string, model: string): ReasoningEffortId | undefined
  * @param effort - the explicitly chosen effort, or undefined to clear.
  * @returns fulfillment after the optional settings write settles.
  */
-rememberEffort(provider: string, model: string, effort: ReasoningEffortId | undefined): Promise<void>
+async rememberEffort(provider: string, model: string, effort: ReasoningEffortId | undefined): Promise<void>
 ```
 
 Types: [ReasoningEffortId](llm-streaming.md)

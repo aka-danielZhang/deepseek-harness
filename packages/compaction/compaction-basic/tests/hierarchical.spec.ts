@@ -126,6 +126,7 @@ class ExposedEngine extends BasicCompactionEngine {
   runInput(input: {
     messages: readonly Message[]
     tools?: readonly ToolSchema[]
+    system?: string
   }, owner: Agent) {
     return this.summarize(input, owner, SIGNAL)
   }
@@ -244,17 +245,6 @@ describe('hierarchical compaction fallback', () => {
     expect(instruction(adapter.calls[0] as GenerateOptions)).toContain('acting as a compaction engine')
   })
 
-  it('preserves one system head exactly once on the fitting one-shot path', async () => {
-    const { adapter, engine, owner } = fixture()
-    const systemHead = createSystemMessage('fixed system head', 'test-system')
-    await engine.runInput({ messages: [systemHead, user('small')] }, owner)
-
-    expect(adapter.calls).toHaveLength(1)
-    expect(adapter.calls[0]).not.toHaveProperty('system')
-    expect(adapter.calls[0]?.messages[0]).toBe(systemHead)
-    expect(adapter.calls[0]?.messages.filter(message => message.id === systemHead.id)).toHaveLength(1)
-  })
-
   it('preserves one-shot behavior when the adapter omits capacity metadata', async () => {
     const { adapter, engine, owner } = noCapacityFixture()
     await expect(engine.run([user('small')], owner)).resolves.toMatchObject({ llmStreamCall: true })
@@ -331,33 +321,6 @@ describe('hierarchical compaction fallback', () => {
     expect(adapter.calls.every(call => call.purpose === 'compaction')).toBe(true)
     expect(adapter.calls.every(call => call.sessionId === session.id)).toBe(true)
     expect(adapter.calls.some(call => isReduce(call))).toBe(true)
-  })
-
-  it('replays the fixed system head once per stage without promoting a later system update', async () => {
-    const { adapter, engine, owner } = fixture()
-    const systemHead = createSystemMessage('fixed system head', 'test-system')
-    const dynamicSystem = createSystemMessage('dynamic system update '.repeat(50), 'test-system')
-    const source = [
-      user(`first ${'x'.repeat(1200)}`),
-      dynamicSystem,
-      ...Array.from({ length: 4 }, (_, index) => user(`${index}: ${'x'.repeat(1200)}`)),
-    ]
-    await engine.runInput({ messages: [systemHead, ...source] }, owner)
-
-    expect(adapter.calls.length).toBeGreaterThan(1)
-    for (const call of adapter.calls) {
-      expect(call).not.toHaveProperty('system')
-      expect(call.messages[0]).toBe(systemHead)
-      expect(call.messages.filter(message => message.id === systemHead.id)).toHaveLength(1)
-    }
-    const mapCalls = adapter.calls.filter(call => !isReduce(call))
-    expect(mapCalls.flatMap(call => call.messages)
-      .filter(message => message.id === dynamicSystem.id)).toEqual([dynamicSystem])
-    const dynamicCall = mapCalls.find(call => call.messages.some(message => message.id === dynamicSystem.id))
-    expect(dynamicCall?.messages[0]).toBe(systemHead)
-    expect(dynamicCall?.messages.indexOf(dynamicSystem)).toBeGreaterThan(0)
-    expect(adapter.calls.filter(isReduce)
-      .some(call => call.messages.some(message => message.id === dynamicSystem.id))).toBe(false)
   })
 
   it('splits provider-rejected map spans without replaying successful leaves', async () => {

@@ -3,8 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
-const { resolveDiffBase, rewriteManifest } = await import(new URL('./publish-fork.mjs', import.meta.url).href) as {
-  resolveDiffBase: (upstreamRef: string | undefined, git?: (args: string[]) => string) => string
+const { rewriteManifest } = await import(new URL('./publish-fork.mjs', import.meta.url).href) as {
   rewriteManifest: (
     source: string, name: string, version: string, versions: Map<string, string>,
     output: string, src: string, workspace: Map<string, string>,
@@ -27,49 +26,16 @@ function rewrite(fields: Record<string, unknown>): Record<string, unknown> {
   return JSON.parse(readFileSync(output, 'utf8')) as Record<string, unknown>
 }
 
-describe('fork diff baseline', () => {
-  it('keeps the historical merge-base default for local compatibility', () => {
-    const calls: string[][] = []
-    expect(resolveDiffBase(undefined, (args) => {
-      calls.push(args)
-      return 'default-base\n'
-    })).toBe('default-base')
-    expect(calls).toEqual([['merge-base', 'HEAD', 'upstream/master']])
-  })
-
-  it('resolves an explicit immutable ref and requires it in HEAD ancestry', () => {
-    const calls: string[][] = []
-    expect(resolveDiffBase('dsh-v0.1.5-alpha.1', (args) => {
-      calls.push(args)
-      return args[0] === 'rev-parse' ? '5dda764e\n' : ''
-    })).toBe('5dda764e')
-    expect(calls).toEqual([
-      ['rev-parse', '--verify', 'dsh-v0.1.5-alpha.1^{commit}'],
-      ['merge-base', '--is-ancestor', '5dda764e', 'HEAD'],
-    ])
-  })
-
-  it('rejects an explicit ref that is not merged into HEAD', () => {
-    expect(() => resolveDiffBase('unrelated', (args) => {
-      if (args[0] === 'rev-parse') return 'deadbeef\n'
-      throw new Error('not an ancestor')
-    })).toThrow('upstream ref unrelated (deadbeef) is not an ancestor of HEAD')
-  })
-})
-
 describe('fork package manifests', () => {
-  it.each(['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'])('preserves import names in %s', (field) => {
+  it.each(['dependencies', 'devDependencies', 'optionalDependencies'])('preserves import names in %s', (field) => {
     const manifest = rewrite({ [field]: { '@deepseek-ai/dsh-tool-cordis': 'workspace:^' } })
     expect(manifest[field]).toEqual({ '@deepseek-ai/dsh-tool-cordis': 'npm:@crazx/dsh-tool-cordis@0.1.2-rc.1.zw.2' })
     expect(manifest.name).toBe('@crazx/dsh')
   })
 
-  it('aliases fork peers so plain consumers can satisfy them from the registry', () => {
-    // A bare zw version under the official @deepseek-ai name exists only as
-    // @crazx, so consumers without a pre-provided peer explode under
-    // auto-install-peers (the zw.1 dsh-agent-default-model incident).
+  it('keeps peer names with a semver requirement on the host-provided fork instance', () => {
     expect(rewrite({ peerDependencies: { '@deepseek-ai/dsh-tool-cordis': 'workspace:^' } }).peerDependencies)
-      .toEqual({ '@deepseek-ai/dsh-tool-cordis': 'npm:@crazx/dsh-tool-cordis@0.1.2-rc.1.zw.2' })
+      .toEqual({ '@deepseek-ai/dsh-tool-cordis': '0.1.2-rc.1.zw.2' })
   })
 
   it('retains peer metadata under the same package name', () => {

@@ -105,7 +105,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the remembered effort, or undefined when the route has none.',
       },
       {
-        signature: 'rememberEffort(provider: string, model: string, effort: ReasoningEffortId | undefined): Promise<void>',
+        signature: 'async rememberEffort(provider: string, model: string, effort: ReasoningEffortId | undefined): Promise<void>',
         description: 'Record the remembered effort for one route, or clear it when `effort` is undefined. A deployment without a settings provider keeps its composition entry, so the call fulfills with no stored effect.',
         parameters: [{ name: 'provider', description: 'registered provider route.' }, { name: 'model', description: 'provider-owned model id.' }, { name: 'effort', description: 'the explicitly chosen effort, or undefined to clear.' }],
         returns: 'fulfillment after the optional settings write settles.',
@@ -3355,7 +3355,7 @@ export const EVENT_API: readonly EventApiEntry[] = [
     mode: 'emit',
     signature: '\'mcp-client/status\'(serverName: string, status: McpClientStatus, toolCount: number): void',
     summary: 'One MCP server connection reached a new committed state, or its live tool registration count changed.',
-    description: 'One MCP server connection reached a new committed state, or its live tool registration count changed. Emitted only after the supervisor mutated its state, never before, on the shared Cordis event bus. `serverName` is unique only inside its registration scope; deployments that reuse a name across Agent scopes need an additional observer-owned identity. Listeners are synchronous by contract. A synchronous listener throw is logged and contained by the emitter; async work must contain its own rejection.',
+    description: 'One MCP server connection reached a new committed state, or its live tool registration count changed. Emitted only after the supervisor mutated its state, never before. The emitting fiber\'s context and every ancestor context observe this through the shared event bus; `serverName` disambiguates concurrent instances. Listener failures are contained and logged by the emitter, so an observer defect cannot disrupt the supervisor\'s own state machine.',
     parameters: [{ name: 'serverName', description: 'the configured namespace of the emitting instance.' }, { name: 'status', description: 'the connection state at this commit point.' }, { name: 'toolCount', description: 'number of tools this server currently has registered on `ctx.tools`.' }],
   },
   {
