@@ -14,11 +14,10 @@ import type { Config, McpClientStatus } from '@deepseek-ai/dsh-mcp-client'
 
 // vi.mock factories are hoisted above every import/const, so the mock fns and
 // class must be created inside vi.hoisted to exist when the factories run.
-const { mockConnect, mockClose, mockListTools, mockSetNotificationHandler, MockClient, instances } = vi.hoisted(() => {
+const { mockConnect, mockClose, mockListTools, MockClient, instances, ctorOptions } = vi.hoisted(() => {
   const mockConnect = vi.fn<() => Promise<void>>()
   const mockClose = vi.fn<() => Promise<void>>()
   const mockListTools = vi.fn<(_params?: Record<string, unknown>) => Promise<unknown>>()
-  const mockSetNotificationHandler = vi.fn()
   const mockRequest = vi.fn(async (
     request: { method: string; params?: Record<string, unknown> },
     _schema: unknown,
@@ -28,26 +27,31 @@ const { mockConnect, mockClose, mockListTools, mockSetNotificationHandler, MockC
   })
   class MockClient {
     onclose: (() => void) | undefined
+    transport: { onclose?: () => void; close: () => Promise<void> } | undefined
     connect = mockConnect
     close = mockClose
     request = mockRequest
-    setNotificationHandler = mockSetNotificationHandler
-    constructor() { instances.push(this) }
+    getInstructions: () => string | undefined = () => undefined
+    getServerCapabilities = () => ({ tools: {} })
+    listTools = async () => await mockListTools() as Awaited<ReturnType<typeof mockRequest>>
+    callTool = vi.fn(async () => ({}))
+    constructor(_info?: unknown, options?: { listChanged?: { tools?: { onChanged?: () => void } } }) {
+      instances.push(this)
+      ctorOptions.push(options)
+      this.transport = { close: mockClose }
+    }
   }
   const instances: MockClient[] = []
-  return { mockConnect, mockClose, mockListTools, mockSetNotificationHandler, MockClient, instances }
+  const ctorOptions: Array<{ listChanged?: { tools?: { onChanged?: () => void } } } | undefined> = []
+  return { mockConnect, mockClose, mockListTools, MockClient, instances, ctorOptions }
 })
 
-vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
+vi.mock('@modelcontextprotocol/client', () => ({
   Client: MockClient,
 }))
 
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
-  StdioClientTransport: vi.fn(),
-}))
-
-vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
-  StreamableHTTPClientTransport: vi.fn(),
+vi.mock('@deepseek-ai/dsh-mcp-client/src/transport.ts', () => ({
+  createTransport: vi.fn(() => ({ close: mockClose, start: async () => {} })),
 }))
 
 // vi.mock is hoisted above static imports, so the modules under test see the
@@ -159,7 +163,7 @@ describe('status emissions', () => {
       this.onclose?.()
       return Promise.resolve()
     })
-    mockListTools.mockResolvedValue(listing('remote'))
+    mockListTools.mockImplementation(async () => listing('remote'))
     ctx = await mountRegistry()
   })
 
@@ -253,8 +257,10 @@ describe('status emissions', () => {
     await vi.waitFor(() => { expect(events.at(-1)?.status).toBe('connected') })
 
     mockListTools.mockResolvedValue(listing('remote', 'extra'))
-    const handler = mockSetNotificationHandler.mock.calls[0]![1] as () => Promise<void>
-    await handler()
+    const onChanged = ctorOptions.at(-1)?.listChanged?.tools?.onChanged
+    onChanged?.()
+    // The supervisor consumes onChanged as fire-and-forget; wait out the queued re-sync.
+    await vi.waitFor(() => { expect(events.at(-1)?.toolCount).toBe(2) })
 
     expect(events.at(-1)).toEqual({ serverName: 'srv', status: 'connected', toolCount: 2 })
     await handle.dispose()
