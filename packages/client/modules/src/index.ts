@@ -6,7 +6,7 @@
  * combo scripts plus their source maps,
  * contributes the registration facade, application preloads, bootstrap scripts,
  * and graph to the webserver's index injection table, and provides the
- * `clientModuleHost` service (the HMR node half's registration/notification
+ * `clientModules` service (the HMR node half's registration/notification
  * face).
  *
  * Scanning is incremental per package — there is no full-rescan code path.
@@ -33,8 +33,7 @@ import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
-import type { DshClientManifest } from '@deepseek-ai/dsh-package-manifest'
-import { optionalStringArray, stripClientSuffix } from './client/manifest.ts'
+import { exactPackageSpecifier, parseDshClient, stripClientSuffix } from './client/manifest.ts'
 import type { WebBootBatch, WebBootBatchPhase, WebBootEntry, WebBootGraph } from './client/manifest.ts'
 
 export { stripClientSuffix } from './client/manifest.ts'
@@ -172,55 +171,6 @@ const COMBO_REVISION_PLACEHOLDER = '0'.repeat(HASH_REVISION_LENGTH)
 const SOURCE_MAP_TRAILER = /(?:\r?\n)?\/\/# sourceMappingURL=[^\r\n]*(?:\r?\n)?$/
 /** Debugger source name appended to page bundles in the WebWorker image. */
 const SOURCE_URL_TRAILER = /(?:\r?\n)?\/\/# sourceURL=([^\r\n]+)(?:\r?\n)?$/
-
-/** Return a bare package-root specifier, excluding package subpaths and path-like entries. */
-function exactPackageSpecifier(specifier: string): string | undefined {
-  if (specifier.startsWith('@')) {
-    const parts = specifier.split('/')
-    return parts.length === 2 && parts.every(Boolean) ? specifier : undefined
-  }
-  return specifier.length > 0 && !specifier.includes('/') ? specifier : undefined
-}
-
-/**
- * A scoped republish keeps the unscoped name and changes only the scope
- * (`@deepseek-ai/dsh-client-modules` vs `@crazx/dsh-client-modules`). The
- * graph row id stays the Loader specifier; this match only locates the
- * owning manifest.
- */
-function manifestOwnsLoaderPackage(manifestName: string, expectedPackageName: string): boolean {
-  if (manifestName === expectedPackageName) return true
-  if (!manifestName.startsWith('@') || !expectedPackageName.startsWith('@')) return false
-  const manifestSlash = manifestName.indexOf('/')
-  const expectedSlash = expectedPackageName.indexOf('/')
-  if (manifestSlash === -1 || expectedSlash === -1) return false
-  const manifestSuffix = manifestName.slice(manifestSlash + 1)
-  const expectedSuffix = expectedPackageName.slice(expectedSlash + 1)
-  return expectedSuffix.length > 0 && manifestSuffix === expectedSuffix
-}
-
-/** Narrow an unknown parsed JSON value to the `dsh.client` declaration, throwing on malformed fields. */
-function parseDshClient(pkgName: string, value: unknown): DshClientManifest | undefined {
-  if (value === undefined) return undefined
-  if (typeof value !== 'object' || value === null) {
-    throw new Error(`client-modules: ${pkgName} has a non-object dsh.client declaration`)
-  }
-  const decl = value as Record<string, unknown>
-  if (typeof decl.platform !== 'string') {
-    throw new Error(`client-modules: ${pkgName} dsh.client.platform must be a string`)
-  }
-  const inject = optionalStringArray(pkgName, 'dsh.client.inject', decl.inject)
-  const external = optionalStringArray(pkgName, 'dsh.client.external', decl.external)
-  if (decl.immediately !== undefined && typeof decl.immediately !== 'boolean') {
-    throw new Error(`client-modules: ${pkgName} dsh.client.immediately must be a boolean`)
-  }
-  return {
-    platform: decl.platform,
-    ...(inject !== undefined ? { inject } : {}),
-    ...(external !== undefined ? { external } : {}),
-    ...(decl.immediately !== undefined ? { immediately: decl.immediately } : {}),
-  }
-}
 
 /** Resolve `exports["./client"]` to a relative path, accepting the string and one-level conditional forms. */
 function clientExportOf(pkgName: string, exportsField: unknown): string | undefined {
@@ -554,6 +504,7 @@ export class ClientModuleRegistry extends Service {
 
   /**
    * Build the service: subscribe, seed, and run the activation flush.
+   * Bundle routes follow the optional Web carrier's injected lifecycle.
    * @param ctx - plugin context carrying Loader and an optional Web carrier.
    */
   constructor(ctx: Context) {
@@ -590,8 +541,7 @@ export class ClientModuleRegistry extends Service {
         'client-modules: bundle route',
       )
     }
-    if (ctx.get('webServer') === undefined) ctx.inject(['webServer'], registerWebCarrier)
-    else registerWebCarrier(ctx)
+    ctx.inject(['webServer'], registerWebCarrier)
     ctx.on('webserver/index-inject', (table) => {
       table.push(...bootInjections(this.composed))
     })
@@ -798,11 +748,9 @@ export class ClientModuleRegistry extends Service {
    * Locate the manifest of the package the Loader mounts for a row. The row's
    * module location is authoritative: the specifier resolves through the same
    * Loader resolution that imported the row's host half — including any
-   * active ESM hooks — and the nearest ancestor manifest declaring the name,
-   * or a scoped republish of the same unscoped name, owns the module. The
-   * returned `packageName` is the Loader specifier so the graph row id stays
-   * the name the composition and HTML preload list already use. Tree-anchored
-   * `require` resolution remains only for runtimes without Node internals.
+   * active ESM hooks — and the nearest ancestor manifest declaring the name
+   * owns the module. Tree-anchored `require` resolution remains only for
+   * runtimes without Node internals.
    * @param loaderName - module specifier of the loader row.
    * @param baseUrl - resolution base of the tree that owns the row.
    * @returns the manifest path, or `undefined` when the name resolves to no package root.
@@ -855,11 +803,8 @@ export class ClientModuleRegistry extends Service {
       if (existsSync(candidate)) {
         try {
           const name = (JSON.parse(readFileSync(candidate, 'utf8')) as { name?: unknown }).name
-          if (
-            typeof name === 'string'
-            && (expectedPackageName === undefined || manifestOwnsLoaderPackage(name, expectedPackageName))
-          ) {
-            return { path: candidate, packageName: expectedPackageName ?? name }
+          if (typeof name === 'string' && (expectedPackageName === undefined || name === expectedPackageName)) {
+            return { path: candidate, packageName: name }
           }
         } catch {
           // An unreadable or malformed intermediate manifest cannot own the
@@ -1038,12 +983,7 @@ export class ClientModuleRegistry extends Service {
     if (response !== undefined) {
       return {
         status: 200,
-        headers: {
-          'content-type': response.contentType,
-          'cache-control': IMMUTABLE_CACHE,
-          // WKWebView can stall on loopback chunked responses during boot-time bundle fan-out.
-          'content-length': String(response.body.length),
-        },
+        headers: { 'content-type': response.contentType, 'cache-control': IMMUTABLE_CACHE },
         ...(method === 'HEAD' ? {} : { body: response.body }),
       }
     }
