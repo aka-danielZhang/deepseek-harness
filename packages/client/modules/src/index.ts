@@ -34,6 +34,24 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
 import { exactPackageSpecifier, parseDshClient, stripClientSuffix } from './client/manifest.ts'
+
+/**
+ * A scoped republish keeps the unscoped name and changes only the scope
+ * (`@deepseek-ai/dsh-client-modules` vs `@crazx/dsh-client-modules`). The
+ * graph row id stays the Loader specifier; this match only locates the
+ * owning manifest.
+ */
+function manifestOwnsLoaderPackage(manifestName: string, expectedPackageName: string): boolean {
+  if (manifestName === expectedPackageName) return true
+  if (!manifestName.startsWith('@') || !expectedPackageName.startsWith('@')) return false
+  const manifestSlash = manifestName.indexOf('/')
+  const expectedSlash = expectedPackageName.indexOf('/')
+  if (manifestSlash === -1 || expectedSlash === -1) return false
+  const manifestSuffix = manifestName.slice(manifestSlash + 1)
+  const expectedSuffix = expectedPackageName.slice(expectedSlash + 1)
+  return expectedSuffix.length > 0 && manifestSuffix === expectedSuffix
+}
+
 import type { WebBootBatch, WebBootBatchPhase, WebBootEntry, WebBootGraph } from './client/manifest.ts'
 
 export { stripClientSuffix } from './client/manifest.ts'
@@ -748,9 +766,11 @@ export class ClientModuleRegistry extends Service {
    * Locate the manifest of the package the Loader mounts for a row. The row's
    * module location is authoritative: the specifier resolves through the same
    * Loader resolution that imported the row's host half — including any
-   * active ESM hooks — and the nearest ancestor manifest declaring the name
-   * owns the module. Tree-anchored `require` resolution remains only for
-   * runtimes without Node internals.
+   * active ESM hooks — and the nearest ancestor manifest declaring the name,
+   * or a scoped republish of the same unscoped name, owns the module. The
+   * returned `packageName` is the Loader specifier so the graph row id stays
+   * the name the composition and HTML preload list already use. Tree-anchored
+   * `require` resolution remains only for runtimes without Node internals.
    * @param loaderName - module specifier of the loader row.
    * @param baseUrl - resolution base of the tree that owns the row.
    * @returns the manifest path, or `undefined` when the name resolves to no package root.
@@ -803,8 +823,11 @@ export class ClientModuleRegistry extends Service {
       if (existsSync(candidate)) {
         try {
           const name = (JSON.parse(readFileSync(candidate, 'utf8')) as { name?: unknown }).name
-          if (typeof name === 'string' && (expectedPackageName === undefined || name === expectedPackageName)) {
-            return { path: candidate, packageName: name }
+          if (
+            typeof name === 'string'
+            && (expectedPackageName === undefined || manifestOwnsLoaderPackage(name, expectedPackageName))
+          ) {
+            return { path: candidate, packageName: expectedPackageName ?? name }
           }
         } catch {
           // An unreadable or malformed intermediate manifest cannot own the
@@ -983,7 +1006,12 @@ export class ClientModuleRegistry extends Service {
     if (response !== undefined) {
       return {
         status: 200,
-        headers: { 'content-type': response.contentType, 'cache-control': IMMUTABLE_CACHE },
+        headers: {
+          'content-type': response.contentType,
+          'cache-control': IMMUTABLE_CACHE,
+          // WKWebView can stall on loopback chunked responses during boot-time bundle fan-out.
+          'content-length': String(response.body.length),
+        },
         ...(method === 'HEAD' ? {} : { body: response.body }),
       }
     }

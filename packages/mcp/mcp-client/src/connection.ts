@@ -24,6 +24,7 @@ import { createTransport } from './transport.ts'
 import { syncTools } from './tools.ts'
 import type { ToolBridgeOptions, ToolDisposers } from './tools.ts'
 import type { Config } from './index.ts'
+import type { McpClientStatus } from './types.ts'
 
 /** Automatic reconnect policy for one MCP server connection. */
 export interface ReconnectConfig {
@@ -115,6 +116,39 @@ export interface ConnectionHandle extends ServerContext {
   dispose(): Promise<void>
 }
 
+/** Supervisor state facts {@link computeMcpClientStatus} derives a status from. */
+export interface McpStatusFacts {
+  /** Disposal started; the supervisor makes no further transitions. */
+  readonly disposed: boolean
+  /** A client generation currently holds the connection slot. */
+  readonly hasClient: boolean
+  /** A reconnect backoff timer is armed. */
+  readonly hasTimer: boolean
+  /** The current generation finished connect plus its initial tool sync. */
+  readonly connected: boolean
+  /** Consecutive failed attempts within the current outage. */
+  readonly failedAttempts: number
+}
+
+/**
+ * Derive the observable connection status from supervisor state facts.
+ *
+ * Evaluation order is load-bearing: `failed` is judged before `reconnecting`
+ * because a give-up leaves `failedAttempts` above zero with no client and no
+ * timer, and `connected` is judged before the in-flight branches because the
+ * outage budget resets from that mark.
+ *
+ * @param facts - the supervisor's current state facts.
+ * @returns the committed status those facts represent.
+ */
+export function computeMcpClientStatus(facts: McpStatusFacts): McpClientStatus {
+  if (facts.disposed) return 'disposed'
+  if (!facts.hasClient && !facts.hasTimer) return 'failed'
+  if (facts.connected) return 'connected'
+  if (facts.hasTimer) return 'reconnecting'
+  return facts.failedAttempts === 0 ? 'connecting' : 'reconnecting'
+}
+
 /**
  * Start the supervised connection for one MCP server and keep it alive per
  * the reconnect policy.
@@ -156,6 +190,24 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
   /** The real error from the first connection attempt, for startup-await diagnostics. */
   let firstAttemptError: unknown
 
+  /** Snapshot the supervisor facts the status projection reads. */
+  const facts = (): McpStatusFacts => ({
+    disposed,
+    hasClient: client !== undefined,
+    hasTimer: reconnectTimer !== undefined,
+    connected: connectedAt !== undefined,
+    failedAttempts,
+  })
+
+  /** Publish the current committed status; an observer throw cannot disrupt the supervisor. */
+  const publish = (): void => {
+    try {
+      ctx.emit('mcp-client/status', config.serverName, computeMcpClientStatus(facts()), disposers.size)
+    } catch (error) {
+      ctx.logger.error(`${label}: status listener failed: ${String(error)}`)
+    }
+  }
+
   /** A generation may act only while it is the current one on a live plugin. */
   const isCurrent = (generation: Client): boolean => !disposed && client === generation
 
@@ -170,6 +222,8 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     const run = syncChain.then(async () => {
       if (!isCurrent(generation)) return
       disposers = await syncTools(generation, ctx, syncOpts, disposers)
+      // The registration count changed even when the status did not.
+      publish()
     })
     // The chain tail must survive a failed sync; the enqueuing caller owns reporting.
     syncChain = run.catch(() => {})
@@ -191,6 +245,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       client = undefined
       closeClient = undefined
       ctx.logger.error(`${label}: failed generation could not confirm transport closure — reconnect stopped to avoid overlapping server processes; reload the plugin or restart the Host to retry`)
+      publish()
       return
     }
     generationDown(generation)
@@ -215,6 +270,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
         ? 'connection lost and reconnect is disabled — registered tools will fail until an HMR reload or Host restart'
         : 'connection failed and reconnect is disabled — no tools were registered; reload the plugin or restart the Host to connect'
       ctx.logger.error(`${label}: ${message}`)
+      publish()
       return
     }
     // A connection that stayed up past the stability window (= maxDelayMs, the
@@ -229,8 +285,11 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
         for (const dispose of disposers.values()) dispose()
         disposers = new Map()
         serverInstructions = ''
+        // The queued unregistration is the toolCount's own commit point.
+        publish()
       })
       ctx.logger.error(`${label}: giving up after ${policy.maxAttempts} consecutive failed reconnect attempts — tools unregistered; reload the plugin or restart the Host to reconnect`)
+      publish()
       return
     }
     const delayMs = Math.min(policy.maxDelayMs, policy.initialDelayMs * 2 ** (failedAttempts - 1))
@@ -242,6 +301,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     }, delayMs)
     // An armed reconnect timer must never hold the process open on its own.
     reconnectTimer.unref()
+    publish()
   }
 
   /**
@@ -339,11 +399,15 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     if (!isCurrent(generation)) return
     serverInstructions = instructions
     connectedAt = Date.now()
+    publish()
     if (failedAttempts > 0) ctx.logger.info(`${label}: reconnected and re-synced tools (attempt ${failedAttempts}/${policy.maxAttempts})`)
   }
 
   /** The in-flight (or last settled) connection attempt; dispose awaits it for quiescence. */
   let settling = connectGeneration(true)
+  // connectGeneration's synchronous prefix claims the client slot, so this
+  // publishes the initial 'connecting' before any await can run.
+  publish()
 
   // The ready promise settles when the first attempt finishes (regardless of
   // success). If the first attempt fails and reconnect is enabled, the
@@ -392,6 +456,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
         clearTimeout(reconnectTimer)
         reconnectTimer = undefined
       }
+      publish()
       const close = closeClient
       client = undefined
       closeClient = undefined
@@ -404,6 +469,8 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       await syncChain
       for (const dispose of disposers.values()) dispose()
       disposers = new Map()
+      // The queued unregistration is the toolCount's own commit point.
+      publish()
     },
   }
 }
