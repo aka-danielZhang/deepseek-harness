@@ -154,7 +154,20 @@ async function main() {
   for (const [nme, dir] of all) {
     workspaceVersions.set(nme, JSON.parse(readFileSync(resolve(dir, 'package.json'), 'utf8')).version)
   }
-  const selected = args.includes('--all') ? [...all.keys()] : changedPackages(all)
+  // Extra packages the source diff cannot see but the fork must still ship:
+  // packaging-only corrections to upstream artifacts (e.g. a dependency the
+  // upstream publish pipeline dropped from the manifest). Checked-in list, no
+  // workflow arguments needed.
+  let extra = []
+  try {
+    const extraPath = resolve(import.meta.dirname, 'publish-fork-extra.json')
+    const list = JSON.parse(readFileSync(extraPath, 'utf8'))
+    extra = list.filter(n => all.has(n))
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
+  const changed = changedPackages(all)
+  const selected = args.includes('--all') ? [...all.keys()] : [...changed, ...extra.filter(n => !changed.includes(n))]
 
   if (listOnly) {
     console.log(`fork-modified packages (${selected.length}):`)
