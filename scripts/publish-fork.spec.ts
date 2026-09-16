@@ -3,11 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
-const { rewriteManifest } = await import(new URL('./publish-fork.mjs', import.meta.url).href) as {
+const { rewriteManifest, rewriteTypertOwnership } = await import(new URL('./publish-fork.mjs', import.meta.url).href) as {
   rewriteManifest: (
     source: string, name: string, version: string, versions: Map<string, string>,
     output: string, src: string, workspace: Map<string, string>,
   ) => string
+  rewriteTypertOwnership: (libDir: string, originalName: string, renamedName: string) => number
 }
 const roots: string[] = []
 afterEach(() => {
@@ -48,5 +49,25 @@ describe('fork package manifests', () => {
   it('keeps vendor versions on their own version line and ordinary dependencies unchanged', () => {
     const manifest = rewrite({ dependencies: { '@deepseek-ai/cordis': 'workspace:^', 'js-yaml': '^4.2.0' } })
     expect(manifest.dependencies).toEqual({ '@deepseek-ai/cordis': '^4.0.2', 'js-yaml': '^4.2.0' })
+  })
+})
+
+describe('fork typert artifact ownership', () => {
+  it('rewrites the embedded package field of typert artifacts in both quote styles', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-fork-typert-'))
+    roots.push(root)
+    writeFileSync(join(root, 'typert.host.js'), "export const TYPERT = { package: '@deepseek-ai/dsh-api-session-controller', face: 'host' }")
+    writeFileSync(join(root, 'typert.remote-client.js'), 'export const REMOTE = { "package": "@deepseek-ai/dsh-api-session-controller" }')
+    writeFileSync(join(root, 'index.js'), "export const UNTOUCHED = { package: '@deepseek-ai/dsh-api-session-controller' }")
+
+    const rewritten = rewriteTypertOwnership(root, '@deepseek-ai/dsh-api-session-controller', '@crazx/dsh-api-session-controller')
+
+    expect(rewritten).toBe(2)
+    expect(readFileSync(join(root, 'typert.host.js'), 'utf8'))
+      .toBe("export const TYPERT = { package: '@crazx/dsh-api-session-controller', face: 'host' }")
+    expect(readFileSync(join(root, 'typert.remote-client.js'), 'utf8'))
+      .toBe('export const REMOTE = { "package": "@crazx/dsh-api-session-controller" }')
+    expect(readFileSync(join(root, 'index.js'), 'utf8'))
+      .toBe("export const UNTOUCHED = { package: '@deepseek-ai/dsh-api-session-controller' }")
   })
 })

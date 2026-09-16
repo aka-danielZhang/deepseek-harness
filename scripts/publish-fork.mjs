@@ -23,7 +23,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve, basename } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -95,6 +95,34 @@ function changedPackages(all) {
  * @param {Map<string, string>} workspaceVersions - Original workspace versions.
  * @returns {string} Published package name.
  */
+/**
+ * Rewrite the embedded ownership field of generated typert artifacts. The
+ * generator stamps `package: '<workspace name>'` into typert.host.js /
+ * typert.remote-client.js at build time; upstream 0.1.6 typert-loader rejects
+ * a manifest whose package differs from the exporting (renamed) package, so
+ * the staged copy must carry the fork scope.
+ *
+ * @param {string} libDir - the staged package's lib directory.
+ * @param {string} originalName - the workspace package name stamped at build.
+ * @param {string} renamedName - the fork-scoped publish name.
+ * @returns {number} count of artifacts rewritten.
+ */
+export function rewriteTypertOwnership(libDir, originalName, renamedName) {
+  const pattern = new RegExp(`(['"]?package['"]?\\s*:\\s*)(['"])${originalName.replaceAll('/', '\\/')}\\2`, 'g')
+  let rewritten = 0
+  for (const entry of readdirSync(libDir, { withFileTypes: true })) {
+    if (!entry.isFile() || !/^typert.*\.(js|mjs|cjs)$/.test(entry.name)) continue
+    const file = resolve(libDir, entry.name)
+    const source = readFileSync(file, 'utf8')
+    const next = source.replace(pattern, `$1$2${renamedName}$2`)
+    if (next !== source) {
+      writeFileSync(file, next)
+      rewritten += 1
+    }
+  }
+  return rewritten
+}
+
 export function rewriteManifest(pkgJson, name, version, versionOf, stagingPath, src, workspaceVersions) {
   const manifest = JSON.parse(readFileSync(pkgJson, 'utf8'))
   const upstreamVersion = manifest.version
@@ -230,6 +258,8 @@ async function main() {
     // Pack from the STAGING copy: it needs lib/ from the built real tree.
     const real = all.get(name)
     cpSync(resolve(real, 'lib'), resolve(stagingDir, 'lib'), { recursive: true })
+    const typertRewritten = rewriteTypertOwnership(resolve(stagingDir, 'lib'), name, renamed)
+    if (typertRewritten > 0) console.log(`  typert ownership rewritten in ${typertRewritten} artifact(s) of ${renamed}`)
     const out = run('pnpm', ['pack', '--pack-destination', staging], { cwd: stagingDir })
     const tgz = out.trim().split('\n').pop()
     const tarball = resolve(staging, basename(tgz))
