@@ -438,7 +438,8 @@ describe('Desktop toolbar portal', () => {
     })
     // The hidden chrome stays the strict in-place header; nothing portals.
     expect(hosts.centerHost.querySelector('nav')).toBeNull()
-    expect(b.view.container.querySelector('header[aria-hidden="true"]')).toBeTruthy()
+    // alpha.2 hero semantics: the blank header keeps its leading/corner controls in place.
+    expect(b.view.container.querySelector('[data-conversation-header-corner]')).toBeTruthy()
   })
 })
 

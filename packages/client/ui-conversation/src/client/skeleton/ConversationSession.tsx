@@ -173,7 +173,7 @@ export function ConversationSessionHeader({
   }
 
   return (
-    <header aria-hidden={hideChrome || undefined} className={clsx(css.header, hideChrome && css.headerBlank)}>
+    <header className={clsx(css.header, hideChrome && css.headerBlank)}>
       <div className={css.titleRow}>
         <div className={css.headerLeading} data-conversation-header-leading="">
           {renderSlot('conversation.session.header.leading', {})}
