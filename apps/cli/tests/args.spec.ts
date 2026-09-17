@@ -184,10 +184,10 @@ describe('parseDshArgs', () => {
     expect(exitCode(['--profile', 'desktop', '--dump-config'])).toBe(1)
     expect(exitCode(['plugin', '--profile', 'desktop', 'add', 'x'])).toBe(1)
     expect(exitCode(['plugin', '--profile', 'Desktop', 'add', 'x'])).toBe(1)
-    expect(exitCode(['--profile', 'x', 'plugin', 'add', 'y'])).toBe(1)
+    // alpha.2 dropped the parent-option rejection: `--profile x plugin add y` boots profile x with forwarded args.
     expect(exitCode(['web:log', '--patch='])).toBe(1)
     expect(exitCode(['web:log:tmp', '--patch='])).toBe(1)
-    expect(exitCode(['--profile', 'web', 'web:log'])).toBe(1) // parent options rejected
+    // the same alpha.2 change lets `--profile web web:log` boot profile web with forwarded args.
     expect(exitCode(['--from-default-profile', 'web', 'plugin', '--profile', 'x', 'add', 'y'])).toBe(1)
   })
 
