@@ -180,20 +180,6 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
       resolved = resolveBoot(program, profile, options, args)
     })
 
-  if (first === 'plugin') {
-    const plugin = program.command('plugin').description('manage a profile\'s plugins by forwarding the remaining arguments to pnpm in the profile directory')
-    plugin
-      .requiredOption('--profile <name>', 'the profile whose plugins to manage (initialized on first use)', selectProfile)
-      .allowUnknownOption()
-      .argument('[args...]', 'pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...)')
-      .action((args: string[], options: { profile: string }) => {
-        if (options.profile === '') program.error('error: --profile needs a name')
-        rejectElectronProfile(plugin, options.profile)
-        if (args.length === 0) program.error('error: plugin needs pnpm arguments to forward (e.g. add <package>)')
-        resolved = { mode: 'plugin', profile: options.profile, args }
-      })
-  }
-
 
   /** Reject parent options supplied before a subcommand. */
   const rejectParentOptions = (command: string): void => {
