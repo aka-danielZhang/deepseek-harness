@@ -56,15 +56,14 @@ function ok<T>(value: T) {
 
 const dictionary: Record<string, string> = zh
 const t: PermissionRowProps['t'] = key => dictionary[key] ?? key
-type AttentionSnapshot = Parameters<Parameters<PermissionRowProps['useSessionPendingInteraction']>[0]>[0]
+type AttentionSnapshot = Parameters<Parameters<PermissionRowProps['useSessionStatus']>[0]>[0]
 const noAttention: AttentionSnapshot = new Map()
-const useSessionPendingInteraction: PermissionRowProps['useSessionPendingInteraction'] = selector => selector(noAttention)
+const useSessionStatus: PermissionRowProps['useSessionStatus'] = selector => selector(noAttention)
 const runtime = {
   useSessions: (() => { throw new Error('unused') }) as never,
-  useSessionPendingInteraction,
-  usePanelInfo, useResource,
-  useToolbarHosts,
-  useWorkspaces: (() => { throw new Error('unused') }) as never,
+  useSessionStatus,
+  usePanelInfo, useSessionRetainInfo: () => undefined, useResource,
+  useToolbarHosts,  useWorkspaces: (() => { throw new Error('unused') }) as never,
 }
 
 function mount(controller: PermissionPresetSettingsController) {

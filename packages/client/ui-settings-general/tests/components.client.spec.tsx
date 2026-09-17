@@ -22,6 +22,8 @@ function derivedDocumentStore(remote: object) {
   return new SettingsDocumentStore(ctx, new SettingsDescribeMirror(ctx))
 }
 import { en } from '../src/client/locales.ts'
+import { DesktopUpdateBadge } from '../src/client/DesktopUpdateIndicator.tsx'
+import type { DesktopUpdateView } from '../src/client/desktop-update-bridge.ts'
 
 afterEach(cleanup)
 
@@ -31,11 +33,46 @@ const t: TriggerContentProps['t'] = key => (en as Record<string, string>)[key] ?
 
 // Global standard kit stubs: none of these components consume the hooks.
 const unusedHook = (() => { throw new Error('unused by settings-general components') }) as never
-type AttentionSnapshot = Parameters<Parameters<TriggerContentProps['useSessionPendingInteraction']>[0]>[0]
+type AttentionSnapshot = Parameters<Parameters<TriggerContentProps['useSessionStatus']>[0]>[0]
 const noAttention: AttentionSnapshot = new Map()
+const useSessionStatus: TriggerContentProps['useSessionStatus'] = selector => selector(noAttention)
 const useSessionPendingInteraction: TriggerContentProps['useSessionPendingInteraction'] = selector => selector(noAttention)
-const kit = { useSessions: unusedHook, useSessionPendingInteraction, usePanelInfo, useToolbarHosts, useResource, useWorkspaces: unusedHook }
+const kit = {
+  useSessions: unusedHook, useSessionStatus, useSessionPendingInteraction,
+  usePanelInfo, useSessionRetainInfo: () => undefined, useResource, useWorkspaces: unusedHook,
+  useToolbarHosts,
+}
 
+describe('Desktop collapsed update badge', () => {
+  it('shows update status, marks failures, and yields to connection feedback', () => {
+    let state: DesktopUpdateView = { failed: false, opening: false }
+    let connection: 'connected' | 'connecting' | 'disconnected' = 'connected'
+    const props = { ...kit, t,
+      useDesktopUpdate: (select => select(state)) as Parameters<typeof DesktopUpdateBadge>[0]['useDesktopUpdate'],
+      useConnectionState: (select => select(connection)) as Parameters<typeof DesktopUpdateBadge>[0]['useConnectionState'],
+    }
+    const view = render(<DesktopUpdateBadge {...props} />)
+    expect(screen.queryByRole('img')).toBeNull()
+    state = { ...state, presentation: { phase: 'available', version: '1.0.1' } }
+    view.rerender(<DesktopUpdateBadge {...props} />)
+    expect(screen.getByRole('img', { name: 'Update' }).getAttribute('data-error')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+    state = { ...state, failed: true }
+    view.rerender(<DesktopUpdateBadge {...props} />)
+    expect(screen.getByRole('img', { name: en['desktop.update.retry'] }).getAttribute('data-error')).toBe('true')
+    state = { failed: true, opening: false }
+    view.rerender(<DesktopUpdateBadge {...props} />)
+    expect(screen.getByRole('img', { name: en['desktop.update.retry'] }).getAttribute('data-error')).toBe('true')
+    state = { failed: false, opening: false, presentation: { phase: 'error', failure: 'install' } }
+    view.rerender(<DesktopUpdateBadge {...props} />)
+    expect(screen.getByRole('img', { name: en['desktop.update.retry'] }).getAttribute('data-error')).toBe('true')
+    for (const value of ['connecting', 'disconnected'] as const) {
+      connection = value
+      view.rerender(<DesktopUpdateBadge {...props} />)
+      expect(screen.queryByRole('img')).toBeNull()
+    }
+  })
+})
 describe('chrome content', () => {
   it('TriggerContent renders the icon with the label in the wide column', () => {
     const { container } = render(<TriggerContent {...kit} wide t={t} />)
