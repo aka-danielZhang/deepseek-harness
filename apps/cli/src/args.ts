@@ -220,22 +220,23 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
   registerWebLog('web:log', false)
   registerWebLog('web:log:tmp', true)
 
-  const plugin = program.command('plugin').description('manage a profile\'s plugins by forwarding the remaining arguments to pnpm in the profile directory')
-
-  plugin
-    .requiredOption('--profile <name>', 'the profile whose plugins to manage (initialized on first use)')
-    .allowUnknownOption()
-    .argument('[args...]', 'pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...)')
-    .action((args: string[], options: { profile: string }) => {
-      rejectParentOptions('plugin')
-      if (options.profile === '') program.error('error: --profile needs a name')
-      rejectElectronProfile(plugin, options.profile)
-      if (args.length === 0) program.error('error: plugin needs pnpm arguments to forward (e.g. add <package>)')
-      resolved = { mode: 'plugin', profile: options.profile, args }
-    })
+  if (first === 'plugin') {
+    const plugin = program.command('plugin').description('manage a profile\'s plugins by forwarding the remaining arguments to pnpm in the profile directory')
+    plugin
+      .requiredOption('--profile <name>', 'the profile whose plugins to manage (initialized on first use)', selectProfile)
+      .allowUnknownOption()
+      .argument('[args...]', 'pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...)')
+      .action((args: string[], options: { profile: string }) => {
+        if (options.profile === '') program.error('error: --profile needs a name')
+        rejectElectronProfile(plugin, options.profile)
+        if (args.length === 0) program.error('error: plugin needs pnpm arguments to forward (e.g. add <package>)')
+        resolved = { mode: 'plugin', profile: options.profile, args }
+      })
+  }
 
   try {
-    const expanded = first !== undefined && !first.startsWith('-') && first !== 'plugin'
+    const forkCommand = first === 'plugin' || first === 'web:log' || first === 'web:log:tmp'
+    const expanded = first !== undefined && !first.startsWith('-') && !forkCommand
       ? ['--profile', ...argv]
       : argv
     program.parse(expanded, { from: 'user' })
