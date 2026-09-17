@@ -1123,16 +1123,16 @@ export class ClientModuleRegistry extends Service {
       ?? this.previousBatchResponses.get(resourceUrl)
       ?? this.chunkResponse(requestUrl)
     if (response !== undefined) {
-      const body = method === 'HEAD' ? undefined : await response.body()
+      const body = await response.body()
       return {
         status: 200,
         headers: {
           'content-type': response.contentType,
           'cache-control': IMMUTABLE_CACHE,
           // WKWebView can stall on loopback chunked responses during boot-time bundle fan-out.
-          ...(body === undefined ? {} : { 'content-length': String(body.length) }),
+          'content-length': String(body.length),
         },
-        ...(body === undefined ? {} : { body }),
+        ...(method === 'HEAD' ? {} : { body }),
       }
     }
     // Anything else under /plugins (including unadvertised combinations and

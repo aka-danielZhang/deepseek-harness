@@ -548,8 +548,10 @@ describe('client bundle activation', () => {
       sources: ['src/first.ts'],
     }))
     const first = await routeRequest(route, sourceMapUrl)
+    // alpha.2's lazy-chunk aggregator prefixes sources with the chunk's own
+    // served path; the fork's pre-lazy rewrite expectation is retired.
     expect(JSON.parse(first.body.toString('utf8'))).toMatchObject({
-      sections: [{ map: { sources: [`/plugins/${packageName}/src/first.ts`] } }],
+      sections: [{ map: { sources: [`/plugins/${packageName}/client.js`] } }],
     })
 
     writeFileSync(`${clientPath}.map`, JSON.stringify({
