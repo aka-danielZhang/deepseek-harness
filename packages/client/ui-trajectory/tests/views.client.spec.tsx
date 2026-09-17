@@ -227,9 +227,9 @@ function standaloneProps(
     useSessions: emptySessions(),
     usePanelInfo, useResource,
     useSessionStatus: bindSnapshotSelector(
-      createSnapshotStore<SessionStatusSnapshot>(new Map()),
-      useToolbarHosts    ),
+      createSnapshotStore<SessionStatusSnapshot>(new Map())),
     useSessionRetainInfo: () => undefined,
+    useToolbarHosts: selector => selector(null),
     useWorkspaces: emptyWorkspaces(),
     useConversation: bindSnapshotSelector(createSnapshotStore(conversationSnapshot(trajectory))),
     useInput: bindSnapshotSelector(input),

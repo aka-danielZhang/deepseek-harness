@@ -36,9 +36,8 @@ const unusedHook = (() => { throw new Error('unused by settings-general componen
 type AttentionSnapshot = Parameters<Parameters<TriggerContentProps['useSessionStatus']>[0]>[0]
 const noAttention: AttentionSnapshot = new Map()
 const useSessionStatus: TriggerContentProps['useSessionStatus'] = selector => selector(noAttention)
-const useSessionPendingInteraction: TriggerContentProps['useSessionPendingInteraction'] = selector => selector(noAttention)
 const kit = {
-  useSessions: unusedHook, useSessionStatus, useSessionPendingInteraction,
+  useSessions: unusedHook, useSessionStatus,
   usePanelInfo, useSessionRetainInfo: () => undefined, useResource, useWorkspaces: unusedHook,
   useToolbarHosts,
 }

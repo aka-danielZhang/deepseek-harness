@@ -194,6 +194,20 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
       })
   }
 
+
+  /** Reject parent options supplied before a subcommand. */
+  const rejectParentOptions = (command: string): void => {
+    const parent = program.opts<BootOptions & { profile?: string }>()
+    if (parent.profile !== undefined || parent.patch !== undefined
+      || parent.dumpConfig !== undefined || parent.dumpDefaultConfig !== undefined
+      || parent.fromDefaultProfile !== undefined) {
+      program.error(
+        `error: ${command} takes none of parent --profile, --from-default-profile, --patch, --dump-config, or --dump-default-config`,
+      )
+    }
+  }
+
+
   /**
    * Fork-local logged web boots: `dsh web:log` tees the web app's output to a
    * timestamped file under $DSH_HOME/logs, `dsh web:log:tmp` under the OS temp

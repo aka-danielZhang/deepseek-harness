@@ -330,6 +330,7 @@ function mount(
       useResource,
       useSessionStatus,
       useSessionRetainInfo: () => undefined,
+      useToolbarHosts: selector => selector(null),
       useWorkspaces: bindSnapshotSelector(workspaces),
       useProjection: (() => undefined),
       useComposerBlock: select => select(options.composerBlock),

@@ -98,8 +98,10 @@ function mountFrame(windowWidth = frameWidth) {
       usePanelInfo={usePanelInfo}
       useSessionStatus={useSessionStatus}
       useSessionRetainInfo={() => undefined}
-      useToolbarHosts={selector => selector(null)}      useResource={useResource}
+      useToolbarHosts={selector => selector(null)}
+      useResource={useResource}
       useWorkspaces={sel => sel(workspaceState)}
+      SessionProvider={({ children }) => children}
       t={key => key === 'brand.localBuild' ? 'DSH Local Build' : key}
     />
   )

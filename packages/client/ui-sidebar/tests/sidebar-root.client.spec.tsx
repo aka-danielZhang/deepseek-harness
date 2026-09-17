@@ -203,6 +203,7 @@ describe('SidebarRoot shell', () => {
       collapsed width={56}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])}
+      useToolbarHosts={selector => selector(null)}
       useResource={useResource} useWorkspaces={neverHook}
       startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
       renderSlot={((key: string) => key === 'sidebar.toggle.badge'
