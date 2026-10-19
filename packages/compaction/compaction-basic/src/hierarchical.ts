@@ -165,10 +165,15 @@ class HierarchicalSummarizer {
     }
 
     const inputBudget = Math.floor(contextWindow * this.hierarchy.chunkInputRatio)
+    // A generation cap larger than the window minus the input budget is
+    // meaningless on small-context models (test mocks, small routes): clamp
+    // the configured reserve instead of refusing to run at all.
+    const mapReserveCap = Math.max(1, Math.min(this.hierarchy.mapMaxTokens, contextWindow - inputBudget))
+    const reduceReserveCap = Math.max(1, Math.min(this.hierarchy.reduceMaxTokens, contextWindow - inputBudget))
     this.assertStageOutputReserve(
       contextWindow,
       inputBudget,
-      this.hierarchy.mapMaxTokens,
+      mapReserveCap,
       'map',
     )
     const systemMessage = input.messages[0]?.role === 'system' ? input.messages[0] : undefined
@@ -204,7 +209,7 @@ class HierarchicalSummarizer {
           },
           mapInstruction(span.start, span.end, totalUnits),
           target,
-          this.hierarchy.mapMaxTokens,
+          mapReserveCap,
           agent,
           signal,
         )
@@ -229,7 +234,7 @@ class HierarchicalSummarizer {
       this.assertStageOutputReserve(
         contextWindow,
         inputBudget,
-        this.hierarchy.reduceMaxTokens,
+        reduceReserveCap,
         'reduce',
       )
     }
@@ -286,7 +291,7 @@ class HierarchicalSummarizer {
             },
             reduceInstruction(round, span.start, span.end, totalUnits),
             target,
-            this.hierarchy.reduceMaxTokens,
+            reduceReserveCap,
             agent,
             signal,
           )
@@ -341,7 +346,7 @@ class HierarchicalSummarizer {
       rawOutput: final.result.rawOutput,
       provider: target.provider,
       model: target.model,
-      maxTokens: usedReduce ? this.hierarchy.reduceMaxTokens : this.hierarchy.mapMaxTokens,
+      maxTokens: usedReduce ? reduceReserveCap : mapReserveCap,
       ...(usage === undefined ? {} : { usage }),
     }
     if (!hadFailedLlmAttempt && calls.length === 1) return { ...result, llmStreamCall: true }

@@ -477,7 +477,7 @@ describe('hierarchical compaction fallback', () => {
     expect(sawDoubleDigit).toBe(true)
   })
 
-  it('fails an incompatible stage output reserve before streaming hierarchy calls', async () => {
+  it('clamps an oversized stage output reserve to the model context window', async () => {
     const ctx = new Context()
     void new LlmRuntime(ctx)
     new SessionProjectionRegistry(ctx)
@@ -497,8 +497,12 @@ describe('hierarchical compaction fallback', () => {
       session: Session.create(SessionId('bad-reserve')),
       options: { provider: PROVIDER, model: MODEL },
     } as Agent
-    await expect(engine.run([user('x'.repeat(5000))], owner)).rejects.toThrow(/output reserve/)
-    expect(adapter.calls).toHaveLength(0)
+    // The configured 200-token reserve cannot fit beside the 900-token input
+    // budget inside the 1000-token window; it clamps to 100 instead of
+    // refusing. Two ~450-token messages overflow the one-shot estimate while
+    // each fits the message budget, so the stages run with the clamped cap.
+    const result = await engine.run([user('x'.repeat(1800)), user('y'.repeat(1800))], owner)
+    expect(result.maxTokens).toBe(100)
   })
 
   it('does not require an unused reduce reserve for a single map result', async () => {

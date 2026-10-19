@@ -111,10 +111,15 @@ export class AgentDefaultModelConfig extends Service {
     if (entry === undefined) return
     const editor = this.ctx.get('configEditor')
     if (editor === undefined) return
+    // Capture the accepted selection at call time: callers may keep mutating
+    // the object while the serialized write waits its turn.
+    const provider = next.provider
+    const model = next.model
+    const reasoningEffort = next.reasoningEffort === undefined ? undefined : String(next.reasoningEffort)
     const saved = this.saves.then(() => editor.edit(entry, (current) => {
-      const merged: Record<string, unknown> = { ...current, provider: next.provider, model: next.model }
-      if (next.reasoningEffort === undefined) delete merged.reasoningEffort
-      else merged.reasoningEffort = String(next.reasoningEffort)
+      const merged: Record<string, unknown> = { ...current, provider, model }
+      if (reasoningEffort === undefined) delete merged.reasoningEffort
+      else merged.reasoningEffort = reasoningEffort
       return merged
     }))
     this.saves = saved.catch(() => {})
@@ -153,7 +158,7 @@ export class AgentDefaultModelConfig extends Service {
     if (editor === undefined) return
     const saved = this.saves.then(() => editor.edit(entry, (current) => {
       const previous = Array.isArray(current.rememberedEfforts) ? current.rememberedEfforts : []
-      const kept = previous.filter((row: { provider: string, model: string }) =>
+      const kept = previous.filter((row: { provider: string; model: string }) =>
         row.provider !== provider || row.model !== model)
       return {
         ...current,

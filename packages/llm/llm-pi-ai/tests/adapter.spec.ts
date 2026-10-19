@@ -129,7 +129,7 @@ describe('PiAiAdapter provider routing', () => {
     const ctx = await harness(server.url, {
       sessionAffinityHeaders: ['x-opencode-session', 'x-client-request-id'],
     })
-    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [], sessionId: 'session-affinity-1' as never })
+    await assemble(ctx, { model: 'deepseek-flash', messages: [], sessionId: 'session-affinity-1' as never })
     expect(server.headers[0]?.['x-opencode-session']).toBe('session-affinity-1')
     expect(server.headers[0]?.['x-client-request-id']).toBe('session-affinity-1')
     expect(server.headers[0]?.['user-agent']).toBe(userAgent())
@@ -156,7 +156,7 @@ describe('PiAiAdapter provider routing', () => {
   it('sends no session-affinity headers when the profile does not declare them', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url, {})
-    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [], sessionId: 'session-affinity-3' as never })
+    await assemble(ctx, { model: 'deepseek-flash', messages: [], sessionId: 'session-affinity-3' as never })
     expect(server.headers[0]?.['x-opencode-session']).toBeUndefined()
     expect(server.headers[0]?.['x-client-request-id']).toBeUndefined()
   })
@@ -166,7 +166,7 @@ describe('PiAiAdapter provider routing', () => {
     const ctx = await harness(server.url, {
       sessionAffinityHeaders: ['x-opencode-session'],
     })
-    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
+    await assemble(ctx, { model: 'deepseek-flash', messages: [] })
     expect(server.headers[0]?.['x-opencode-session']).toBeUndefined()
   })
 

@@ -57,7 +57,10 @@ it('retains required cwd in the first request after proactive compaction with op
     const harness = await mountAgentLoopTestHarness(ctx)
     const agent = await harness.create(SessionId('compaction-admission'), { provider: 'mock', model: 'mock' }, { cwd: root })
     agent.followup(createUserMessage({
-      content: [{ type: 'text', text: 'Old context evidence. '.repeat(700) + 'Do work once, then finish.' }], source: { kind: 'user' },
+      // Sized to trip the proactive threshold (0.5 × 2048) while still
+      // fitting the one-shot summary estimate, so the fork's hierarchical
+      // fallback stays unengaged on this spec's size-blind mock.
+      content: [{ type: 'text', text: 'Old context evidence. '.repeat(220) + 'Do work once, then finish.' }], source: { kind: 'user' },
     }))
     await agent.whenIdle()
     const events = agent.session.snapshotEvents()
