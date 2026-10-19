@@ -22,7 +22,7 @@ import { Command, CommanderError, InvalidArgumentError } from 'commander'
 interface ProfileInvocation {
   mode: 'profile'
   profile: string
-  /** Shipped template used once to initialize a missing profile. */
+  /** Shipped template that replaces the named profile. */
   fromDefaultProfile?: string | undefined
   /** Extra patch-list overlays applied after the profile's own layer, in argv order. */
   patches: string[]
@@ -34,10 +34,19 @@ interface ProfileInvocation {
 interface DumpConfigInvocation {
   mode: 'dump-config'
   profile: string
-  /** Shipped template used once to initialize a missing profile. */
+  /** Shipped template that replaces the named profile. */
   fromDefaultProfile?: string | undefined
   /** Omit the profile's user layer and --patch overlays; print bundle layers only. */
   defaultOnly: boolean
+  patches: string[]
+}
+
+/** Print declared plugin schemas without mounting the profile. */
+interface DumpConfigSchemaInvocation {
+  mode: 'dump-config-schema'
+  profile: string
+  /** Shipped template that replaces the named profile. */
+  fromDefaultProfile?: string | undefined
   patches: string[]
 }
 
@@ -60,13 +69,14 @@ interface WebLogInvocation {
 }
 
 /** The resolved `dsh` invocation. Help, version, and errors exit inside {@link parseDshArgs}. */
-export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation | WebLogInvocation
+export type DshInvocation = ProfileInvocation | DumpConfigInvocation | DumpConfigSchemaInvocation | PluginInvocation | WebLogInvocation
 
 /** Launcher flags for profile boot and configuration dumps. */
 interface BootOptions {
   patch?: string[]
   dumpConfig?: boolean
   dumpDefaultConfig?: boolean
+  dumpConfigSchema?: boolean
   fromDefaultProfile?: string
 }
 
@@ -92,7 +102,7 @@ const HELP_EXAMPLES = `
 Examples:
   dsh web                                   boot the web profile (same as: dsh --profile web)
   dsh rescue --from-default-profile web
-                                            create rescue from the shipped web template, then boot it
+                                            recreate rescue from the shipped web template, then boot it
   dsh headless "run the tests"              answer one task, print the result, and exit
   dsh tui --patch ./extra.yml               boot a custom profile with one extra overlay
   dsh tui --resume <session>                arguments after the launcher flags reach the app
@@ -114,17 +124,21 @@ function resolveBoot(program: Command, profile: string, options: BootOptions, ar
   const patches = options.patch ?? []
   if (patches.includes('')) program.error('error: --patch needs a path')
   if (options.fromDefaultProfile === '') program.error('error: --from-default-profile needs a name')
-  if (options.dumpConfig !== true && options.dumpDefaultConfig !== true) {
+  const dumps = [options.dumpConfig, options.dumpDefaultConfig, options.dumpConfigSchema].filter(Boolean)
+  if (dumps.length === 0) {
     return { mode: 'profile', profile, fromDefaultProfile: options.fromDefaultProfile, patches, args }
   }
-  if (options.dumpConfig === true && options.dumpDefaultConfig === true) {
-    program.error('error: --dump-config and --dump-default-config are mutually exclusive')
+  if (dumps.length > 1) {
+    program.error('error: --dump-config, --dump-default-config, and --dump-config-schema are mutually exclusive')
   }
   // The dump is boot-free: it never runs app command-line providers, so it
   // cannot show what those flags would decide, and printing a tree that differs
   // from the same invocation's boot would mislead.
   if (args.length > 0) {
     program.error(`error: config dumps take no app arguments, got ${args.map(argument => JSON.stringify(argument)).join(' ')}`)
+  }
+  if (options.dumpConfigSchema === true) {
+    return { mode: 'dump-config-schema', profile, fromDefaultProfile: options.fromDefaultProfile, patches }
   }
   const defaultOnly = options.dumpDefaultConfig === true
   if (defaultOnly && patches.length > 0) {
@@ -138,9 +152,10 @@ function resolveBoot(program: Command, profile: string, options: BootOptions, ar
  * error.
  * @param argv - arguments after the Node binary and script.
  * @param version - version string printed by `--version`.
+ * @param manageDesktopProfile - permit Desktop's installed carrier to manage its reserved profile's plugins.
  * @returns the resolved invocation.
  */
-export function parseDshArgs(argv: readonly string[], version: string): DshInvocation {
+export function parseDshArgs(argv: readonly string[], version: string, manageDesktopProfile = false): DshInvocation {
   const first = argv[0]
   let resolved: DshInvocation | undefined
   // Annotated, not inferred: the actions below call back into `program`, and an
@@ -163,9 +178,10 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
     .enablePositionalOptions()
     .argument('[args...]', 'arguments for the booted profile\'s app (see: dsh --profile <name> --help)')
     .option('--profile <name>', 'the profile under $DSH_HOME/profiles to boot', selectProfile)
-    .option('--from-default-profile <name>', 'initialize a new custom profile from a shipped profile template')
+    .option('--from-default-profile <name>', 'replace a custom profile with a fresh copy of a shipped profile template')
     .option('--patch <path>', 'extra patch-list overlay applied after the profile layer (repeatable)', collect)
     .option('--dump-config', 'print the composed profile tree and exit')
+    .option('--dump-config-schema', 'print JSON Schema for profile entries and patches without mounting')
     .option('--dump-default-config', 'print the profile tree without its user layer or --patch overlays and exit')
     .action((args: string[], options: BootOptions & { profile?: string }) => {
       // With the app owning -h, the launcher's own help is what a bare
@@ -223,14 +239,18 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
   if (first === 'plugin') {
     const plugin = program.command('plugin').description('manage a profile\'s plugins by forwarding the remaining arguments to pnpm in the profile directory')
     plugin
+      // Commander copies the launcher's disabled help option into subcommands. The
+      // forwarder restores its own help and stops reading options at forwarded pnpm input.
+      .helpOption('-h, --help', 'show this help')
+      .passThroughOptions()
       .requiredOption('--profile <name>', 'the profile whose plugins to manage (initialized on first use)', selectProfile)
       .allowUnknownOption()
       .argument('[args...]', 'pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...)')
       .action((args: string[], options: { profile: string }) => {
         if (options.profile === '') program.error('error: --profile needs a name')
-        rejectElectronProfile(plugin, options.profile)
+        if (!manageDesktopProfile) rejectElectronProfile(plugin, options.profile)
         if (args.length === 0) program.error('error: plugin needs pnpm arguments to forward (e.g. add <package>)')
-        resolved = { mode: 'plugin', profile: options.profile, args }
+        resolved = { mode: 'plugin', profile: options.profile.toLowerCase() === 'desktop' ? 'desktop' : options.profile, args }
       })
   }
 

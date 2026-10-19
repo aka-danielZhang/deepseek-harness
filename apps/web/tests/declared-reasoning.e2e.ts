@@ -6,23 +6,27 @@
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
-import type { Browser, Page } from 'playwright'
-import { chromium } from 'playwright'
-import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
+import type { Browser, Page, Request } from 'playwright'
+import { chromium, webkit } from 'playwright'
+import { afterAll, beforeAll, describe, expect, it, onTestFailed, onTestFinished } from 'vitest'
 import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { AGENT_MODEL_EFFORTS_SETTINGS_NAMESPACE } from '@deepseek-ai/dsh-agent-default-model'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot } from './support.ts'
 
 /** Starts the shipped default on this scenario's declared reasoning model. */
 const OVERLAY = fileURLToPath(new URL('./declared-reasoning.overlay.yml', import.meta.url))
 const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/declared-reasoning', import.meta.url))
 const UI_EXPECTED = fileURLToPath(new URL('./expected/declared-reasoning/ui.expected.md', import.meta.url))
+const POINTER_EXPECTED = fileURLToPath(new URL('./expected/declared-reasoning/pointer-menu.expected.md', import.meta.url))
 const MODE = webSnapshotMode()
 
-describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach the composer', () => {
+describe.skipIf(MODE === 'record').each([
+  { name: 'Chromium', engine: chromium },
+  { name: 'WebKit', engine: webkit },
+])('web e2e: declared reasoning efforts reach the composer ($name)', ({ engine }) => {
   let scaffold: WebScaffold
   let browser: Browser
   let page: Page
@@ -40,19 +44,22 @@ describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach th
           displayName: 'Acme Gateway',
           api: 'openai-completions',
           baseURL: 'https://gateway.acme.example/v1',
-          models: [{
-            id: 'acme-think',
-            name: 'Acme Think',
+          models: [
+            { id: 'acme-think', name: 'Acme Think' },
+            { id: 'acme-swift', name: 'Acme Swift' },
+            { id: 'acme-lite', name: 'Acme Lite' },
+          ].map(model => ({
+            ...model,
             reasoningEfforts: { off: null, high: 'high', max: 'ultra' },
-          }, {
+          })).concat([{
             id: 'acme-mini',
             name: 'Acme Mini',
             reasoningEfforts: { off: null, high: 'high' },
-          }],
+          }]),
         },
       },
     })
-    browser = await chromium.launch()
+    browser = await engine.launch()
     page = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: ZH_BROWSER_LOCALE })
     tripwire = watchConsole(page)
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
@@ -61,12 +68,15 @@ describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach th
   }, 120_000)
 
   afterAll(async () => {
-    await browser?.close()
-    await scaffold?.close()
+    try {
+      await browser?.close()
+    } finally {
+      await scaffold?.close()
+    }
   })
 
   it('offers exactly the declared levels and records the picked one', async () => {
-    onTestFailed(() => saveFailureShot(page, 'web-e2e-declared-reasoning'))
+    onTestFailed(() => saveFailureShot(page, `web-e2e-declared-reasoning-${engine.name()}`))
     const trigger = page.getByRole('button', { name: /^选择模型/ })
     await trigger.waitFor({ timeout: 15_000 })
     await trigger.click()
@@ -104,7 +114,7 @@ describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach th
     await page.keyboard.press('Tab')
     await expect.poll(() => levels.count(), { timeout: 10_000 }).toBe(0)
     await expect.poll(
-      async () => readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8'),
+      async () => readFile(join(scaffold.harnessHome, 'profiles', 'scaffold', 'cordis.patch.yml'), 'utf8'),
       { timeout: 10_000 },
     ).toContain('reasoningEffort: high')
     await expect.poll(() => trigger.getAttribute('aria-label'), { timeout: 10_000 })
@@ -133,14 +143,14 @@ describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach th
   it('restores a remembered effort on re-selection and drops one the model no longer offers', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-effort-memory'))
     const trigger = page.getByRole('button', { name: /^选择模型/ })
-    const settingsPath = join(scaffold.harnessHome, 'settings.yaml')
-    const memory = () => scaffold.ctx.settings.get(AGENT_MODEL_EFFORTS_SETTINGS_NAMESPACE)
+    const patchPath = join(scaffold.harnessHome, 'profiles', 'scaffold', 'cordis.patch.yml')
+    const memory = (model: string) => scaffold.ctx.agentDefaultModel.recallEffort('acme-gateway', model)
 
     // An explicit effort statement is remembered per route.
     await trigger.click()
     await page.getByRole('menuitem', { name: /推理等级/ }).click()
     await page.getByRole('menuitemradio', { name: 'Max' }).click()
-    await expect.poll(async () => readFile(settingsPath, 'utf8'), { timeout: 10_000 })
+    await expect.poll(async () => readFile(patchPath, 'utf8'), { timeout: 10_000 })
       .toContain('effort: max')
 
     // A bare switch to Acme Mini consults an empty memory there: the provider
@@ -153,12 +163,7 @@ describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach th
 
     // Seed what a hand edit or an older declaration would leave behind: Mini
     // remembers Max, which its current profile no longer offers.
-    await scaffold.ctx.settings.update(AGENT_MODEL_EFFORTS_SETTINGS_NAMESPACE, {
-      entries: [
-        { provider: 'acme-gateway', model: 'acme-think', effort: 'max' },
-        { provider: 'acme-gateway', model: 'acme-mini', effort: 'max' },
-      ],
-    })
+    await scaffold.ctx.agentDefaultModel.rememberEffort('acme-gateway', 'acme-mini', ReasoningEffortId('max'))
 
     // A bare switch back to Acme Think restores its remembered Max…
     await trigger.click()
@@ -173,14 +178,134 @@ describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach th
     await page.getByRole('menuitemradio', { name: /Acme Mini/ }).click()
     await expect.poll(() => trigger.getAttribute('aria-label'), { timeout: 10_000 })
       .toBe('选择模型，当前 Acme Mini，推理等级 Default')
-    await expect.poll(() => JSON.stringify(memory()), { timeout: 10_000 })
-      .toBe(JSON.stringify({
-        entries: [{ provider: 'acme-gateway', model: 'acme-think', effort: 'max' }],
-      }))
+    await expect.poll(() => memory('acme-mini'), { timeout: 10_000 }).toBeUndefined()
+    expect(memory('acme-think')).toBe('max')
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
+  it('opens from the pointer with keyboard focus and closes from the trigger in every pane', async () => {
+    onTestFailed(() => saveFailureShot(page, `web-e2e-model-trigger-${engine.name()}`))
+    const trigger = page.getByRole('button', { name: /^选择模型/ })
+    const menu = page.getByRole('menu')
+    for (const pane of ['root', 'model', 'effort']) {
+      await page.locator('[data-composer-input][contenteditable="true"]').focus()
+      await trigger.click()
+      await expect.poll(() => trigger.evaluate(element => element === document.activeElement)).toBe(true)
+      if (pane === 'root') {
+        await page.keyboard.press('ArrowDown')
+        await expect.poll(() => page.getByRole('menuitem', { name: /^模型/ })
+          .evaluate(element => element === document.activeElement)).toBe(true)
+      } else {
+        await page.getByRole('menuitem', { name: pane === 'model' ? /^模型/ : /推理等级/ }).click()
+        const focused = pane === 'model'
+          ? page.getByRole('searchbox', { name: '搜索模型…' })
+          : page.locator('[role="menuitemradio"][aria-checked="true"]')
+        await expect.poll(() => focused.evaluate(element => element === element.ownerDocument.activeElement)).toBe(true)
+      }
+      await trigger.click()
+      await menu.waitFor({ state: 'detached' })
+      await expect.poll(() => trigger.evaluate(element => element === document.activeElement)).toBe(true)
+    }
+    expect(tripwire.pageErrors).toEqual([])
+  })
+
+  it('selects model and effort by mouse and keeps keyboard control after cancelled or rejected clicks', async () => {
+    onTestFailed(() => saveFailureShot(page, `web-e2e-model-pointer-${engine.name()}`))
+    let selections = 0
+    const countSelection = (request: Request): void => {
+      if (new URL(request.url()).pathname.endsWith('/session/selectModel')) selections++
+    }
+    page.on('request', countSelection)
+    onTestFinished(() => { page.off('request', countSelection) })
+    const trigger = page.getByRole('button', { name: /^选择模型/ })
+    const menu = page.getByRole('menu')
+    await trigger.click()
+    await page.getByRole('menuitem', { name: /^模型/ }).click()
+    const current = page.getByRole('menuitemradio', { name: 'Acme Think', exact: true })
+    const target = page.getByRole('menuitemradio', { name: 'Acme Swift', exact: true })
+    const search = page.getByRole('searchbox', { name: '搜索模型…' })
+    await expect.poll(() => search.evaluate(element => element === element.ownerDocument.activeElement)).toBe(true)
+    expect(await search.getAttribute('aria-activedescendant')).toBe(await current.getAttribute('id'))
+
+    // Native mousedown must not blur search and unmount the menu before click in WebKit.
+    await target.getByText('Acme Swift', { exact: true }).hover()
+    await page.mouse.down()
+    try {
+      await expect.poll(() => menu.count()).toBe(1)
+      await expect.poll(() => search.evaluate(element => element === element.ownerDocument.activeElement)).toBe(true)
+      await page.getByText('Acme Gateway', { exact: true }).hover()
+    } finally {
+      await page.mouse.up()
+    }
+    // Later selection counts also include any request from this cancelled press.
+    expect(selections).toBe(0)
+    await search.press('ArrowUp')
+    expect(await search.getAttribute('aria-activedescendant')).toBe(await current.getAttribute('id'))
+    await search.press('ArrowDown')
+    expect(await search.getAttribute('aria-activedescendant')).toBe(await target.getAttribute('id'))
+    await expect.poll(() => search.evaluate(element => element === element.ownerDocument.activeElement)).toBe(true)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Shift+Tab')
+    await menu.waitFor({ state: 'detached' })
+
+    await trigger.click()
+    await page.getByRole('menuitem', { name: /^模型/ }).click()
+    await target.getByText('Acme Swift', { exact: true }).click()
+    await menu.waitFor({ state: 'detached' })
+    expect(selections).toBe(1)
+    await expect.poll(() => scaffold.ctx.agentDefaultModel.currentSelection().model, { timeout: 10_000 })
+      .toBe('acme-swift')
+
+    await trigger.click()
+    await page.getByRole('menuitem', { name: /推理等级/ }).click()
+    await page.getByRole('menuitemradio', { name: 'Max', exact: true }).click()
+    await menu.waitFor({ state: 'detached' })
+    expect(selections).toBe(2)
+    await expect.poll(() => scaffold.ctx.agentDefaultModel.currentSelection().reasoningEffort, { timeout: 10_000 })
+      .toBe('max')
+
+    await page.route('**/api/session/selectModel', async (route) => {
+      const envelope = route.request().postDataJSON() as { rpcId: string }
+      await route.fulfill({
+        json: {
+          type: 'server-response', rpcId: envelope.rpcId,
+          result: {
+            ok: false,
+            error: { code: 'session/writer-held', message: 'writer held', details: { sessionId: 'held-session' } },
+          },
+        },
+      })
+    }, { times: 1 })
+    await trigger.click()
+    await page.getByRole('menuitem', { name: /^模型/ }).click()
+    await expect.poll(() => search.evaluate(element => element === element.ownerDocument.activeElement)).toBe(true)
+    expect(await search.getAttribute('aria-activedescendant')).toBe(await target.getAttribute('id'))
+    await current.click()
+    await page.getByRole('alert').waitFor()
+    expect(selections).toBe(3)
+    await compareOrRefreshGolden(POINTER_EXPECTED,
+      await captureStableAria(page, '[role="group"][aria-label="模型与推理等级"]', scaffold.workspaceCwd), MODE)
+    await expect.poll(() => trigger.evaluate(element => element === document.activeElement)).toBe(true)
+    await page.keyboard.press('Tab')
+    await expect.poll(() => search.evaluate(element => element === element.ownerDocument.activeElement)).toBe(true)
+    expect(await search.getAttribute('aria-activedescendant')).toBe(await target.getAttribute('id'))
+    await search.press('ArrowUp')
+    expect(await search.getAttribute('aria-activedescendant')).toBe(await current.getAttribute('id'))
+    expect(await search.evaluate(element => element === element.ownerDocument.activeElement)).toBe(true)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+    await menu.waitFor({ state: 'detached' })
+
+    await trigger.click()
+    await page.getByRole('menuitem', { name: /^模型/ }).click()
+    await page.locator('[data-composer-input][contenteditable="true"]').focus()
+    await menu.waitFor({ state: 'detached' })
+    await trigger.click()
+    await page.mouse.click(0, 0)
+    await menu.waitFor({ state: 'detached' })
+    expect(tripwire.pageErrors).toEqual([])
+  })
 
   it('keeps its snapshot inventory closed', async () => {
-    await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md', 'pointer-menu.expected.md'])
   })
 })
