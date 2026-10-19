@@ -27,7 +27,6 @@ import {
   compactSurfaceRegion,
   selectCompactableRange,
 } from './region.ts'
-import { summarizeWithHierarchy } from './hierarchical.ts'
 import { summarizeWithLlm } from './summarizer.ts'
 import type { SummarizationInput, SummaryResult } from './summarizer.ts'
 import type {
@@ -88,9 +87,6 @@ const summarizationModelSchema = z.string()
 const maxTokensSchema = z.number().step(1).min(1)
 const compactionRetriesSchema = z.number().step(1).min(0)
 const maxOverflowRetriesSchema = z.number().step(1).min(0)
-const chunkInputRatioSchema = z.number().min(0.1).max(0.9)
-const stageMaxTokensSchema = z.number().step(1).min(1)
-const maxDepthSchema = z.number().step(1).min(1).max(8)
 
 const modelPolicy: z<ModelCompactPolicyConfig> = z.object({
   provider: z.string().required(),
@@ -104,11 +100,6 @@ const modelPolicy: z<ModelCompactPolicyConfig> = z.object({
   maxTokens: maxTokensSchema,
   compactionRetries: compactionRetriesSchema,
   maxOverflowRetries: maxOverflowRetriesSchema,
-  chunkInputRatio: chunkInputRatioSchema,
-  mapMaxTokens: stageMaxTokensSchema,
-  reduceMaxTokens: stageMaxTokensSchema,
-  maxDepth: maxDepthSchema,
-  replayTools: z.boolean(),
 })
 
 /**
@@ -132,11 +123,6 @@ export class BasicCompactionEngine extends CompactionEngine {
     maxTokens: maxTokensSchema,
     compactionRetries: compactionRetriesSchema,
     maxOverflowRetries: maxOverflowRetriesSchema,
-    chunkInputRatio: chunkInputRatioSchema,
-    mapMaxTokens: stageMaxTokensSchema,
-    reduceMaxTokens: stageMaxTokensSchema,
-    maxDepth: maxDepthSchema,
-    replayTools: z.boolean(),
     modelPolicies: z.array(modelPolicy),
     auto: z.boolean(),
   })
@@ -249,10 +235,10 @@ export class BasicCompactionEngine extends CompactionEngine {
   }
 
   /**
-   * Summarize the replayed conversation through the cache-reusing one-shot
-   * request when it fits, or bounded hierarchical calls when it cannot fit or
-   * the Provider confirms a context overflow. Override this sole hook for a
-   * template or remote summarizer.
+   * Summarize the replayed conversation region through a direct one-shot
+   * `ctx.llm.stream()` call whose prefix reuses the conversation's own system
+   * prompt, tools, and messages so the provider's KV cache is not invalidated.
+   * Override this sole hook for a template or remote summarizer.
    * @param input - replayed conversation prefix (system, tools, and leading messages) to condense.
    * @param agent - supplies routed-model history, fallback model, and session id.
    * @param signal - optional cancellation forwarded to the adapter.
@@ -267,14 +253,7 @@ export class BasicCompactionEngine extends CompactionEngine {
     const config = target === undefined
       ? this.config
       : resolveTargetPolicy(this.config, target)
-    return summarizeWithHierarchy(
-      this.ctx,
-      config,
-      input,
-      agent,
-      () => summarizeWithLlm(this.ctx, config, input, agent, signal),
-      signal,
-    )
+    return summarizeWithLlm(this.ctx, config, input, agent, signal)
   }
 
   /**

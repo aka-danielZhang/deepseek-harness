@@ -26,16 +26,6 @@ export interface CompactionPolicyConfig {
   compactionRetries?: number
   /** Maximum retries after canonical context overflow; `0` disables recovery. Defaults to `1`. */
   maxOverflowRetries?: number
-  /** Fraction of the summary model window available to each hierarchical stage input. Defaults to `0.6`. */
-  chunkInputRatio?: number
-  /** Generation cap for one hierarchical map call. Defaults to `4096`. */
-  mapMaxTokens?: number
-  /** Generation cap for one hierarchical reduce call. Defaults to `8192`. */
-  reduceMaxTokens?: number
-  /** Maximum recursive reduce rounds after mapping. Defaults to `4`. */
-  maxDepth?: number
-  /** Replay tool schemas in hierarchical stages. Defaults to `false`. */
-  replayTools?: boolean
 }
 
 /** Exact provider/model override merged over the default compaction policy. */
@@ -68,18 +58,7 @@ interface ResolvedPolicyFields {
   readonly maxTokens: number
   readonly compactionRetries: number
   readonly maxOverflowRetries: number
-  readonly chunkInputRatio: number
-  readonly mapMaxTokens: number
-  readonly reduceMaxTokens: number
-  readonly maxDepth: number
-  readonly replayTools: boolean
 }
-
-/** Validated hierarchy policy used by one summary target. */
-export type ResolvedHierarchyConfig = Pick<
-  ResolvedPolicyFields,
-  'chunkInputRatio' | 'mapMaxTokens' | 'reduceMaxTokens' | 'maxDepth' | 'replayTools'
->
 
 /** Validated immutable config whose target-specific defaults remain unresolved. */
 export type ResolvedConfig = ResolvedPolicyFields & ResolvedRetention & {

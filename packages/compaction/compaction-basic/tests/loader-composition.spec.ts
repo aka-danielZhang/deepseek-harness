@@ -77,11 +77,6 @@ describe('real Loader composition', () => {
       '        headroomTokens: 0',
       '        maxTokens: 32',
       '    retainRatio: 0.125',
-      '    chunkInputRatio: 0.7',
-      '    mapMaxTokens: 1024',
-      '    reduceMaxTokens: 2048',
-      '    maxDepth: 6',
-      '    replayTools: true',
       '    auto: false',
     ])
 
@@ -96,11 +91,6 @@ describe('real Loader composition', () => {
       headroomTokens: 4000,
       modelPolicies: [{ provider: 'mock', model: 'small', headroomTokens: 0, maxTokens: 32 }],
       retainRatio: 0.125,
-      chunkInputRatio: 0.7,
-      mapMaxTokens: 1024,
-      reduceMaxTokens: 2048,
-      maxDepth: 6,
-      replayTools: true,
       auto: false,
     })
   })

@@ -29,7 +29,7 @@ Mount this package to get automatic conversation condensation in a composition t
 
 ### What you get
 
-With the default settings you get four behaviors: automatic condensation as the conversation grows toward the model's context limit; recovery after a confirmed context-overflow error, where the conversation condenses and the request retries; on-demand condensation through the `/compact` command; and — when the pruner is mounted — trimming of oversized tool outputs before condensation. Inputs that fit the summary-model window stay on the cache-reusing one-shot path; oversized or Provider-rejected inputs fall back to bounded chronological map-reduce.
+With the default settings you get four behaviors: automatic condensation as the conversation grows toward the model's context limit; recovery after a confirmed context-overflow error, where the conversation condenses and the request retries; on-demand condensation through the `/compact` command; and — when the pruner is mounted — trimming of oversized tool outputs before condensation.
 
 ### Smallest working composition
 
@@ -72,11 +72,6 @@ All settings are optional. With context window `W`, effective request output cap
 | `maxTokens` | `headroomTokens` (`65536`) | Positive summary output cap, including any provider-counted reasoning tokens. Explicit per-model caps override explicit global caps; otherwise the cap follows the resolved headroom. |
 | `compactionRetries` | `1` | Extra condensation attempts after the first when pressure remains above threshold. |
 | `maxOverflowRetries` | `1` | Maximum retries after a confirmed context-window overflow; `0` disables recovery only. |
-| `chunkInputRatio` | `0.6` | Fraction of the summary model window available to each hierarchy stage input; valid range `[0.1, 0.9]`. |
-| `mapMaxTokens` | `4096` | Provider generation cap for one hierarchy map call. |
-| `reduceMaxTokens` | `8192` | Provider generation cap for one hierarchy reduce call. |
-| `maxDepth` | `4` | Maximum recursive reduce rounds; valid range `1..8`. |
-| `replayTools` | `false` | Replay tool schemas in hierarchy stages. Enabling this may be required by strict Providers but consumes chunk input and reduces prefix reuse. |
 | `modelPolicies` | `[]` | Exact `{ provider, model, ...partialPolicy }` overrides for individual model routes. |
 | `auto` | `true` | Enable automatic condensation and overflow recovery; set `false` for manual-only operation. |
 
@@ -188,7 +183,7 @@ Replacing rather than append-only. Each checkpoint invalidates reuse from the fi
 
 #### What the model sees
 
-The summarization model receives the system prompt and shadowed-region history, with tool declarations and developer updates projected for its route, followed by one final user message: the compaction instruction below. For hierarchy, each map request receives the same system prompt, an ordered tool-balanced source span, and a structured map instruction; reduce requests receive ordered `<partial-summary>` frames and a structured reduce instruction. Tool schemas accompany hierarchy calls only when `replayTools: true`. The conversation model never sees these private requests or their reasoning; only returned text is stored.
+The summarization model receives the system prompt and shadowed-region history, with tool declarations and developer updates projected for its route, followed by one final user message: the compaction instruction below. The conversation model never sees this private request or its reasoning; only returned text is stored.
 
 ##### Compaction instruction (final user message)
 
@@ -231,11 +226,11 @@ Rules:
 
 #### Token effect
 
-A fitting input costs one separate model call: the replayed conversation prefix plus the fixed instruction, with `maxTokens`-capped output. Hierarchy costs one call per map span plus one or more reduction calls capped by `mapMaxTokens` and `reduceMaxTokens`; Provider-confirmed overflow may add failed attempts before local bisection. Convergence retries can pay either cost more than once.
+This is a separate model call: the replayed conversation prefix plus the fixed instruction as input, with `maxTokens`-capped output. Convergence retries can pay this cost more than once.
 
 #### KV Cache effect
 
-The fitting one-shot request matches the conversation's replayed system prompt, tools, and shadowed-region messages byte-for-byte, so the provider's warm prefix cache is reused up to the trailing instruction. Routing to another model or compacting a non-head range forgoes that reuse. Hierarchy intentionally bounds each call and therefore cannot preserve one full warm prefix: map calls may reuse their leading system/message prefix where the Provider permits, while reduce calls operate on newly generated partials. `replayTools: false` also omits the tool-schema prefix to leave more room for source messages.
+The replayed system prompt, tools, and shadowed-region messages match the conversation's last routed request byte-for-byte, so the provider's warm prefix cache is reused up to the trailing instruction; only that instruction, and the summary output, is uncached. Routing the summarizer to a different provider/model, or compacting a non-head range, forgoes this reuse.
 
 ## Known Limitations and Deferred Work
 
@@ -246,8 +241,6 @@ These limits define when automatic condensation is a poor fit or needs special c
 
 - **Meter accuracy follows the fixed heuristic** — missing reusable provider usage falls back to character count plus structural overhead rather than exact tokenization; image occurrences carry provider-exact visual tokens only on routes whose adapter declares request-image pricing.
 - **Overflow classification is adapter-maintained** — provider wording can change; both DeepSeek adapters normalize recognized context-limit failures to `CONTEXT_WINDOW_EXCEEDED`.
-- **Bounded recovery requires summary-model capacity metadata** — an adapter that omits `contextWindow` keeps the legacy one-shot path. If that request succeeds, behavior is unchanged; if it overflows, hierarchy cannot derive safe chunk budgets and fails with an actionable capacity error.
-- **Hierarchy output is a strict checkpoint protocol** — every map and reduce stage must return all required headings. Truncation, visual output, malformed structure, exhausted `maxDepth`, or an indivisible source/partial that still overflows fails the complete compaction transaction without installing a partial checkpoint.
 - **Some indivisible-unit and envelope-only overflow remains outside surface compaction** — recovery cannot shrink system/tools/prefix, split an indivisible non-tool node, or repair a tool unit whose non-prunable remainder still exceeds the window. The optional pruner can shrink text-bearing tool-result bulk inside an otherwise indivisible pair.
 - **`compactRegion` requires an open turn** — a manual call on a fully-closed session throws ("no open turn") rather than compacting.
 - **Summarization failure preserves the latest durable surface** — before any replacement, the auto path logs a warning and proceeds with full over-budget history. If pruning already landed, a later summarization failure proceeds from that durable pruned surface. Summarization truncation at `maxTokens`, which hidden reasoning tokens can consume, follows the same rule.

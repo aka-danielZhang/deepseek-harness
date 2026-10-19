@@ -87,7 +87,7 @@ class OverflowRecoveryAdapter extends LlmAdapter {
       provider,
       id: model,
       name: model,
-      context: { contextWindow: 100_000 },
+      context: { contextWindow: 128 },
     })
   }
 

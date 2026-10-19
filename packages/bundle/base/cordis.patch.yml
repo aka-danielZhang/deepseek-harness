@@ -452,8 +452,6 @@
         argumentsPreviewChars: 500
 
     # One advisory steer when a turn closes on an unfinished todo list.
-    - id: todo-completion-guard
-      name: '@deepseek-ai/dsh-todo-completion-guard'
 
     # The shared base enables the stable model-facing web_search and web_fetch
     # tools. The Web app disables this host row and composes both tools per agent
