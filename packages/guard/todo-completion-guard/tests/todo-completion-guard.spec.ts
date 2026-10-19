@@ -43,7 +43,7 @@ function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
 /** Every guard-steered user message in the agent's log, flattened to joined text + source for terse assertions. */
 function reminders(agent: Agent): { text: string; source: unknown }[] {
   return [...agent.session.snapshotEvents()]
-    .filter((e): e is SessionEvent<'user/message'> => e.type === 'user/message' && e.data.source.kind === 'plugin')
+    .filter((e): e is SessionEvent<'user/message'> => e.type === 'user/message' && e.data.source.kind === 'todo-completion-guard')
     .map(e => ({
       text: e.data.content.map(block => block.type === 'text' ? block.text : '').join('|'),
       source: e.data.source,
@@ -86,8 +86,7 @@ describe('the steering nudge', () => {
     expect(found[0]!.text).toContain('- [pending] test the guard')
     expect(found[0]!.text).toContain('todo_write')
     expect(found[0]!.source).toEqual({
-      kind: 'plugin',
-      plugin: 'todo-completion-guard',
+      kind: 'todo-completion-guard',
       form: 'notice',
       summary: 'todos: 2 unfinished',
     })

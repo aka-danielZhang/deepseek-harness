@@ -10,8 +10,14 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { UserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'todo-completion-guard': { kind: 'todo-completion-guard' } & ContextFormed
+  }
+}
 
 /**
  * Standing-plan row. Same fields as `@deepseek-ai/dsh-tool-todo`'s `TodoItem`.
@@ -29,13 +35,6 @@ declare module '@deepseek-ai/dsh-session/types' {
 }
 
 export const name = 'todo-completion-guard'
-
-/**
- * The `{kind:'plugin'}` source stamped on the guard's reminder — the label is
- * load-bearing (an unlabeled context would render as a user prompt in derived
- * history).
- */
-const PLUGIN_NAME = 'todo-completion-guard'
 
 /**
  * The current turn's standing plan: the latest `todo/write` after the turn's
@@ -74,7 +73,7 @@ function reminder(open: readonly TodoItem[]): UserMessage {
     + 'state that explicitly in the reply and the list may stay as is.'
   return createUserMessage({
     content: [{ type: 'text', text }],
-    source: { kind: 'plugin', plugin: PLUGIN_NAME, form: 'notice', summary: `todos: ${open.length} unfinished` },
+    source: { kind: 'todo-completion-guard', form: 'notice', summary: `todos: ${open.length} unfinished` },
   })
 }
 

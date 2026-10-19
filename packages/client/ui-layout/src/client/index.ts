@@ -54,9 +54,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     /**
      * Subscribe to the desktop toolbar's portal-host pair: null while no
      * toolbar is mounted (the session header renders in place), the pair
-     * while one is (the header portals into it).
+     * while one is (the header portals into it). Optional so compositions
+     * and test fixtures that never portal can omit it.
      */
-    useToolbarHosts: UseToolbarHosts
+    useToolbarHosts?: UseToolbarHosts
   }
 
   interface SlotMap {

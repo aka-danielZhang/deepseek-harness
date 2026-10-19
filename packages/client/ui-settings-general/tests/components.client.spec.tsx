@@ -16,7 +16,7 @@ import { SettingsDocumentStore } from '../src/client/settings-document-store.ts'
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
-const useToolbarHosts: GlobalStandardProps['useToolbarHosts'] = selector => selector(null)
+const useToolbarHosts: NonNullable<GlobalStandardProps['useToolbarHosts']> = selector => selector(null)
 
 /** Store over a real mirror derived from the same scripted context. */
 function derivedDocumentStore(remote: object) {

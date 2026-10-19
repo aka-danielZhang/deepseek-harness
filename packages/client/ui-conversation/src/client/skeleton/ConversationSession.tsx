@@ -70,7 +70,7 @@ export function ConversationSessionHeader({
   const selectedId = useStore(s => s.view)
   const active = resolveActiveView(tabs, selectedId)
   const ancestry = useSessions(s => deriveAncestry(s, sessionId), equalBreadcrumbs)
-  const hosts = useToolbarHosts(hosts => hosts)
+  const hosts = useToolbarHosts?.(hosts => hosts) ?? null
   const showTabs = !hideChrome && tabs.length > 1
   const tabsRow = tabs.length > 1 && (
     <div className={css.tabs} role="tablist" data-conversation-tabs="">

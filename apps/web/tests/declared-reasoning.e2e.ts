@@ -50,7 +50,7 @@ describe.skipIf(MODE === 'record').each([
             { id: 'acme-lite', name: 'Acme Lite' },
           ].map(model => ({
             ...model,
-            reasoningEfforts: { off: null, high: 'high', max: 'ultra' },
+            reasoningEfforts: { off: null, high: 'high', max: 'ultra' } as Record<string, string | null>,
           })).concat([{
             id: 'acme-mini',
             name: 'Acme Mini',

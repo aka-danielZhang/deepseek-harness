@@ -11,11 +11,18 @@ import {
 } from '@deepseek-ai/dsh-llm'
 import type {
   ContentBlock,
+  ContextFormed,
   FinishReason,
   GenerateOptions,
   Message,
   TokenUsage,
 } from '@deepseek-ai/dsh-llm'
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'hierarchical-compaction': { kind: 'hierarchical-compaction' } & ContextFormed
+  }
+}
 import type {
   ResolvedConfig,
   ResolvedHierarchyConfig,
@@ -37,7 +44,6 @@ import {
   validateStructuredSummary,
 } from './hierarchical-prompts.ts'
 
-const PLUGIN_ID = 'dsh-compaction-basic'
 const CHARS_PER_TOKEN = 4
 const ENVELOPE_OVERHEAD = 4
 
@@ -532,7 +538,7 @@ class HierarchicalSummarizer {
     return {
       message: createUserMessage({
         content: [{ type: 'text', text: framePartialSummary(text, start, end) }],
-        source: { kind: 'plugin', plugin: PLUGIN_ID },
+        source: { kind: 'hierarchical-compaction', form: 'notice', summary: `partial summary [${start},${end})` },
       }),
       result,
       start,
@@ -544,7 +550,7 @@ class HierarchicalSummarizer {
   private instructionMessage(text: string): Message {
     return createUserMessage({
       content: [{ type: 'text', text }],
-      source: { kind: 'plugin', plugin: PLUGIN_ID },
+      source: { kind: 'hierarchical-compaction' },
     })
   }
 }

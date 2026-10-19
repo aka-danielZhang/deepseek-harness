@@ -351,7 +351,7 @@ describe('hierarchical compaction fallback', () => {
     const messages = Array.from({ length: 5 }, () => user('x'.repeat(1200)))
     const omitted = fixture()
     await omitted.engine.runInput({
-      messages: [createSystemMessage('hierarchy system', 'test'), ...messages],
+      messages: [createSystemMessage('hierarchy system'), ...messages],
       tools,
     }, omitted.owner)
     expect(omitted.adapter.calls.every(call => call.tools === undefined)).toBe(true)
@@ -446,7 +446,7 @@ describe('hierarchical compaction fallback', () => {
     const { engine, owner } = fixture({ replayTools: true })
     const messages = Array.from({ length: 5 }, () => user('x'.repeat(1200)))
     await expect(engine.runInput({
-      messages: [createSystemMessage('s'.repeat(20_000), 'test'), ...messages],
+      messages: [createSystemMessage('s'.repeat(20_000)), ...messages],
     }, owner)).rejects.toThrow(/system\/tools\/instruction.*above/)
   })
 

@@ -104,7 +104,7 @@ describe('LayoutController', () => {
   })
 
   it('publishes toolbar hosts and notifies subscribers of every transition', () => {
-    const service = new LayoutController(fakePanels(), () => true)
+    const service = new LayoutController(fakePanels(), () => true, createSnapshotStore({ activePanelId: null }))
     const seen: (object | null)[] = []
     const dispose = service.onToolbarHosts((hosts) => { seen.push(hosts) })
 
@@ -125,7 +125,7 @@ describe('LayoutController', () => {
   })
 
   it('retracts its toolbar registration on disposal so the header falls back in place', () => {
-    const service = new LayoutController(fakePanels(), () => true)
+    const service = new LayoutController(fakePanels(), () => true, createSnapshotStore({ activePanelId: null }))
     const seen: (object | null)[] = []
     service.onToolbarHosts((hosts) => { seen.push(hosts) })
     const hosts = { centerHost: {} as HTMLElement, sessionEndHost: {} as HTMLElement }

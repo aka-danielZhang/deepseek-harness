@@ -11,7 +11,7 @@ import { ConfigFormController } from '@deepseek-ai/dsh-client-ui-settings/src/cl
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
-const useToolbarHosts: GlobalStandardProps['useToolbarHosts'] = selector => selector(null)
+const useToolbarHosts: NonNullable<GlobalStandardProps['useToolbarHosts']> = selector => selector(null)
 
 /** Stateless schema service for scope construction in this jsdom fixture. */
 const schemaService = new SettingsSchemaService(new Context())
@@ -95,7 +95,7 @@ function mount(
     useSessions: unusedHook,
     useSessionStatus,
     usePanelInfo, useSessionRetainInfo: () => undefined, useResource,
-    useToolbarHosts,    useWorkspaces: unusedHook,
+    useToolbarHosts,
     useWorkspaces: unusedHook,
     ...allowAllAccess,
     controller,
