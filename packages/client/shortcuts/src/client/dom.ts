@@ -16,7 +16,13 @@ export function detectEnvironment(document: Document, navigator: Navigator): {
 } {
   const desktop = document.documentElement.dataset.platform
   const device = desktop ?? navigator.platform
-  return { runtime: desktop === undefined ? 'web' : 'desktop',
+  // The platform mark scopes the darwin LAYOUT; the desktop RUNTIME
+  // additionally requires the preload's native keyboard bridge
+  // (`window.dshDesktop`). A shell that adopts the darwin layout without
+  // that bridge keeps web keyboard semantics (DOM dispatch, localStorage
+  // persistence) instead of failing its constructor.
+  const bridge = (window as Window & { dshDesktop?: unknown }).dshDesktop
+  return { runtime: desktop !== undefined && bridge !== undefined ? 'desktop' : 'web',
     platform: /darwin|mac|iphone|ipad/iu.test(device) ? 'macos' : /win/iu.test(device) ? 'windows' : 'linux' }
 }
 

@@ -125,10 +125,16 @@ it('detects the client OS and separates Web from the preload marker', () => {
   expect(detectEnvironment(document, { platform: 'Win32' } as Navigator)).toEqual({ runtime: 'web', platform: 'windows' })
   const html = document.documentElement
   const previous = html.dataset.platform
+  const holder = window as { dshDesktop?: unknown }
   try {
     html.dataset.platform = 'linux'
+    // The mark scopes the darwin layout; without the preload's keyboard
+    // bridge the runtime stays web (web keyboard semantics).
+    expect(detectEnvironment(document, navigator)).toEqual({ runtime: 'web', platform: 'linux' })
+    holder.dshDesktop = { protocolVersion: 1 }
     expect(detectEnvironment(document, navigator)).toEqual({ runtime: 'desktop', platform: 'linux' })
   } finally {
+    delete holder.dshDesktop
     if (previous === undefined) delete html.dataset.platform
     else html.dataset.platform = previous
   }
