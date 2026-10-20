@@ -18,6 +18,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     /** Non-interactive notification inside the collapsed sidebar expand button. */
     'sidebar.toggle.badge': { kind: 'single'; scope: 'root'; owner: Record<never, never> }
     /**
+     * One action in the sidebar header, immediately left of the toggle. The
+     * darwin top strip and the logo row each reserve the seat and exactly one
+     * renders per platform, mirroring the toggle it sits beside; the occupant
+     * receives only the column state.
+     */
+    'sidebar.header.action': { kind: 'single'; scope: 'root'; owner: SidebarHeaderActionOwnerProps }
+    /**
      * Brand mark rendered in the expanded brand row and collapsed rail.
      * Declared by this package's `sidebar` entry; deployments may replace
      * the shell's fish fallback without replacing the surrounding controls.
@@ -104,6 +111,12 @@ export interface SidebarSettingsOwnerProps {
   wide: boolean
 }
 
+/** Owner share of the single action in the sidebar header, left of the toggle. */
+export interface SidebarHeaderActionOwnerProps {
+  /** Whether the sidebar renders wide content (false = 56px rail). */
+  wide: boolean
+}
+
 /** Owner share of an action rendered beside Settings at the sidebar foot. */
 export interface SidebarFooterActionOwnerProps {
   /** Whether the sidebar renders wide content (false = 56px rail). */
@@ -140,6 +153,7 @@ export type SidebarRootComponentProps =
     | 'sidebar.brand.mark'
     | 'sidebar.brand.name'
     | 'sidebar.toggle.badge'
+    | 'sidebar.header.action'
     | 'sidebar.panellist'
     | 'sidebar.workspaces'
     | 'sidebar.settings'

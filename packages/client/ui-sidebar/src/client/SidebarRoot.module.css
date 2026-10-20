@@ -183,6 +183,9 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  /* Breathing room between a header action and the 28px toggle; an empty seat
+     renders a layout-neutral anchor, so the collapsed strip keeps its place. */
+  gap: 8px;
   height: 52px;
   box-sizing: border-box;
   margin: -6px calc(-1 * var(--dsh-sidebar-inline-padding)) 0;

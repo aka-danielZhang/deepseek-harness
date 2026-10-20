@@ -7,8 +7,8 @@ import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { allowAllAccess, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ReactNode } from 'react'
 import type {
-  SidebarFooterActionOwnerProps, SidebarRootComponentProps, SidebarSectionOwnerProps,
-  SidebarSettingsOwnerProps,
+  SidebarFooterActionOwnerProps, SidebarHeaderActionOwnerProps, SidebarRootComponentProps,
+  SidebarSectionOwnerProps, SidebarSettingsOwnerProps,
 } from '../src/client/contract/slots.ts'
 import { HeaderLeadingControls, type HeaderLeadingControlsProps } from '../src/client/HeaderLeadingControls.tsx'
 import { SidebarRoot } from '../src/client/SidebarRoot.tsx'
@@ -44,6 +44,7 @@ function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
   const toggleSidebar = vi.fn()
   let regionOwner: SidebarSectionOwnerProps | undefined
   let settingsOwner: SidebarSettingsOwnerProps | undefined
+  let headerActionOwner: SidebarHeaderActionOwnerProps | undefined
   let footerActionOwner: SidebarFooterActionOwnerProps | undefined
   const brandMark = <span data-testid="custom-brand-mark">M</span>
   const brandName = <span data-testid="custom-brand-name">Custom Brand</span>
@@ -63,6 +64,10 @@ function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
         if (key === 'sidebar.brand.mark') return brandMark
         if (key === 'sidebar.brand.name') return brandName
         if (key === 'sidebar.toggle.badge') return null
+        if (key === 'sidebar.header.action') {
+          headerActionOwner = owner
+          return <div data-testid="header-action-seat" data-wide={String(owner.wide)} />
+        }
         if (key === 'sidebar.settings') {
           settingsOwner = owner
           return <div data-testid="settings-seat" data-wide={owner.wide} />
@@ -87,6 +92,10 @@ function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
     settingsOwner: () => {
       if (settingsOwner === undefined) throw new Error('settings owner not rendered')
       return settingsOwner
+    },
+    headerActionOwner: () => {
+      if (headerActionOwner === undefined) throw new Error('header action owner not rendered')
+      return headerActionOwner
     },
     footerActionOwner: () => {
       if (footerActionOwner === undefined) throw new Error('footer action owner not rendered')
@@ -262,6 +271,26 @@ it('keeps the macOS sidebar toggle in its top strip', () => {
   // New Session capsule starts a session.
   expect(screen.getAllByRole('button', { name: 'New session' })).toHaveLength(1)
   expect(screen.getByTestId('custom-brand-mark')).toBeTruthy()
+})
+
+it.each([true, false])('seats the header action directly left of the toggle (darwin=%s)', (darwin) => {
+  if (darwin) document.documentElement.dataset.platform = 'darwin'
+  vi.useFakeTimers()
+  const shell = mountShell()
+  // One platform-exclusive seat: the toggle's parent owns both, and the seat
+  // precedes the toggle in DOM order (the strip is right-aligned).
+  const seat = screen.getByTestId('header-action-seat')
+  const toggle = screen.getByRole('button', { name: en['toggle.collapse'] })
+  expect(seat.nextSibling).toBe(toggle)
+  expect(shell.headerActionOwner().wide).toBe(true)
+  // The collapsed rail keeps the geometry anchor but reports the rail state
+  // once the slide settles; the occupant renders nothing there and the toggle
+  // badge takes over.
+  shell.rerender({ collapsed: true, width: 0 })
+  act(() => { vi.advanceTimersByTime(200) })
+  const collapsedSeat = screen.getByTestId('header-action-seat')
+  expect(collapsedSeat.nextSibling).toBe(screen.getByRole('button', { name: en['toggle.open'] }))
+  expect(shell.headerActionOwner().wide).toBe(false)
 })
 
 it('wires the shell.leading controls to the shared sidebar actions', () => {

@@ -211,8 +211,14 @@ export function SidebarRoot({
       onPointerLeave={() => { armLinger() }}
     >
       {/* macOS hiddenInset titlebar: the strip shares the row with the
-          traffic lights and keeps the toggle at the sidebar's top-right. */}
-      {darwinDesktop && <div className={css.topStrip} data-window-drag>{toggle}</div>}
+          traffic lights and keeps the toggle at the sidebar's top-right; a
+          header action seats itself immediately left of that toggle. */}
+      {darwinDesktop && (
+        <div className={css.topStrip} data-window-drag>
+          {renderSlot('sidebar.header.action', { wide })}
+          {toggle}
+        </div>
+      )}
       <div className={css.logoRow} data-window-drag>
         {/* Expanded, the brand doubles as a New Session shortcut — except on
             macOS, where it stays part of the logo row's window-drag surface
@@ -252,6 +258,9 @@ export function SidebarRoot({
               </button>
             )
         })()}
+        {/* Platform-exclusive, like the toggle itself: on darwin the strip
+            above already owns both seats. */}
+        {!darwinDesktop && renderSlot('sidebar.header.action', { wide })}
         {!darwinDesktop && toggle}
       </div>
 
