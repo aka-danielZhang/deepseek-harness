@@ -58,10 +58,16 @@
   }
 }
 
-/* The toolbar row spans all columns of the first row; the three columns pin
-   to the second row explicitly so auto-placement can never shuffle them. */
+/* The toolbar row spans every column EXCEPT the rightbar track: the right
+   column owns the band above the main row too (its panel anchors to the
+   frame top, official-client posture), so an open panel covers that band
+   beside the toolbar instead of starting below it. With the track collapsed
+   to zero the row still reaches the frame's right edge, and the plain
+   single-row layout keeps a zero-height first row either way. The three
+   columns pin their rows explicitly so auto-placement can never shuffle
+   them. */
 .toolbarRow {
-  grid-column: 1 / -1;
+  grid-column: 1 / -2;
   grid-row: 1;
   min-width: 0;
   min-height: 0;
@@ -236,7 +242,11 @@
    over the centre. */
 .handle {
   position: absolute;
-  grid-area: 1 / 1 / 2 / -1;
+  /* Every row above the bottom row: the fork's first row is the toolbar's
+     38px band, so upstream's `1 / 1 / 2 / -1` (row 1 of a two-row grid) would
+     clip the handle to that band. Matching the right column's span also keeps
+     the right handle grabbable along the full-height panel's left border. */
+  grid-area: 1 / 1 / -2 / -1;
   top: 0;
   bottom: 0;
   width: 8px;
@@ -280,7 +290,12 @@
  */
 .rightbarCol {
   position: relative;
-  grid-row: 2;
+  /* Spans from the frame top down to the bottom row (every row above it, as
+     upstream's single main row did): the occupant's absolute panel anchors at
+     top:0 = the frame top, the official-client posture, instead of starting
+     below the toolbar row. With the toolbar seat empty the first row is zero
+     height and this is layout-identical to upstream. */
+  grid-row: 1 / -2;
   min-width: 0;
   overflow: visible;
 }
