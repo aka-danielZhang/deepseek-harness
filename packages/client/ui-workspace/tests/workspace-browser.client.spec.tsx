@@ -121,7 +121,6 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     useSessionStatus: hook(noPendingInteraction),
     useSessionRetainInfo: () => undefined,
     usePanelInfo, useResource,
-    useToolbarHosts: selector => selector(null),
     useWorkspaces: hook(workspaceState([])),
     ...allowAllAccess,
     useStore: bindSnapshotSelector(store),
@@ -260,7 +259,6 @@ describe('WorkspaceBrowser', () => {
     const b = mount({
       usePanelInfo: hook(panelInfo),
       useSessions: hook(sessionState([summary('current', 1)], { main: sid('current') })),
-      useToolbarHosts: selector => selector(null),
       useWorkspaces: hook(workspaceState([workspace('alpha', ['current'])])),
     })
     fireEvent.click(screen.getByText('alpha'))

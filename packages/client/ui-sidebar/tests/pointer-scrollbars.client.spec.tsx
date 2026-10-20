@@ -42,7 +42,6 @@ function mountColumn(): { column: HTMLElement; quiet: () => boolean } {
     <SidebarRoot
       collapsed={false} width={300}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
-      useToolbarHosts={selector => selector(null)}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useShortcuts={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}

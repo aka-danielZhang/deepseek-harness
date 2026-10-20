@@ -13,7 +13,6 @@ import { PermissionPresetSettingsController } from '../src/client/settings-store
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
-const useToolbarHosts: NonNullable<GlobalStandardProps['useToolbarHosts']> = selector => selector(null)
 
 const catalog = { options: [], defaultPreset: 'read-only', defaultOptions: ['read-only', 'workspace-write', 'danger-full-access'].map(value => ({ value, name: value })) }
 const directory = { store: createSnapshotStore({ value: catalog }), load: () => Promise.resolve(catalog) }
@@ -63,7 +62,6 @@ const runtime = {
   useSessions: (() => { throw new Error('unused') }) as never,
   useSessionStatus,
   usePanelInfo, useSessionRetainInfo: () => undefined, useResource,
-  useToolbarHosts,
   useWorkspaces: (() => { throw new Error('unused') }) as never,
   ...allowAllAccess,
 }

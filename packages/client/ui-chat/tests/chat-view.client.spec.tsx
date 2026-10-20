@@ -463,7 +463,6 @@ function makeHarness(
   const props: HarnessStandardProps = {
     renderFactorySlot,
     usePanelInfo: selector => selector({ activePanelId: null }),
-    useToolbarHosts: selector => selector(null),
     sessionId: SID,
     useSession: bindSnapshotSelector(session.source),
     useChat: bindSnapshotSelector(chatSource.source),

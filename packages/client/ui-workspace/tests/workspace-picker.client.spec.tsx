@@ -101,7 +101,6 @@ function mount(
       useSessionStatus={hook(noPendingInteraction)}
       useSessionRetainInfo={() => undefined}
       usePanelInfo={usePanelInfo} useResource={useResource}
-      useToolbarHosts={selector => selector(null)}
       useWorkspaces={hook(workspaceState(nextItems))}
       {...allowAllAccess}
       onPick={onPick}
@@ -226,7 +225,6 @@ describe('WorkspacePicker', () => {
         useSessionStatus={hook(noPendingInteraction)}
         useSessionRetainInfo={() => undefined}
         usePanelInfo={usePanelInfo} useResource={useResource}
-        useToolbarHosts={selector => selector(null)}
         {...allowAllAccess}
         onPick={vi.fn()} onClose={vi.fn()} createWorkspace={vi.fn()}
         useDirectoryFlow={occupancySource().useDirectoryFlow} renderSlot={renderSlot} t={t}
@@ -246,7 +244,6 @@ describe('WorkspacePicker', () => {
         useSessionStatus={hook(noPendingInteraction)}
         useSessionRetainInfo={() => undefined}
         usePanelInfo={usePanelInfo} useResource={useResource}
-        useToolbarHosts={selector => selector(null)}
         {...allowAllAccess}
         onPick={vi.fn()} onClose={vi.fn()} createWorkspace={vi.fn()}
         useDirectoryFlow={occupancySource().useDirectoryFlow} renderSlot={renderSlot} t={t}

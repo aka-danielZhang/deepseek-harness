@@ -52,7 +52,6 @@ function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
     <SidebarRoot
       collapsed={current.collapsed} width={current.width}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
-      useToolbarHosts={selector => selector(null)}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useShortcuts={selector => selector(shortcuts)}
       useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}
@@ -144,7 +143,6 @@ describe('SidebarRoot shell', () => {
     const { container } = render(<SidebarRoot
       collapsed={false} width={300}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
-      useToolbarHosts={selector => selector(null)}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useShortcuts={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}
@@ -166,7 +164,6 @@ describe('SidebarRoot shell', () => {
     render(<SidebarRoot
       collapsed={false} width={300}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
-      useToolbarHosts={selector => selector(null)}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useShortcuts={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}
@@ -183,7 +180,6 @@ describe('SidebarRoot shell', () => {
     render(<SidebarRoot
       collapsed={false} width={300}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
-      useToolbarHosts={selector => selector(null)}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useShortcuts={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}
@@ -232,7 +228,6 @@ describe('SidebarRoot shell', () => {
     render(<SidebarRoot
       collapsed width={56}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
-      useToolbarHosts={selector => selector(null)}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useShortcuts={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}

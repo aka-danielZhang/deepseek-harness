@@ -17,7 +17,6 @@ import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
-const useToolbarHosts: NonNullable<GlobalStandardProps['useToolbarHosts']> = selector => selector(null)
 
 afterEach(() => {
   cleanup()
@@ -104,7 +103,6 @@ function mount({
     useSessions: select => select(sessions),
     useSessionStatus,
     usePanelInfo, useSessionRetainInfo: () => undefined, useResource,
-    useToolbarHosts,
     useWorkspaces: unusedHook,
     ...allowAllAccess,
     wide,

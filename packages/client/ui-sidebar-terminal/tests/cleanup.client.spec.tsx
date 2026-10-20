@@ -15,7 +15,6 @@ const unusedHook = (): never => { throw new Error('Terminal cleanup does not con
 const standard: Omit<CleanupProps, 'useCloseFailures' | 'retryClose' | 't'> = {
   useSessions: unusedHook, useSessionStatus: unusedHook, useSessionRetainInfo: unusedHook, usePanelInfo: unusedHook,
   useWorkspaces: unusedHook, useResource: unusedHook,
-  useToolbarHosts: selector => selector(null),
   ...allowAllAccess,
 }
 
