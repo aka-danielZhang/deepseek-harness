@@ -135,10 +135,14 @@ export function rewriteManifest(pkgJson, name, version, versionOf, stagingPath, 
     for (const [dep, spec] of Object.entries(deps)) {
       if (versionOf.has(dep)) {
         // Peers require semver, not npm aliases; the host supplies the same
-        // fork instance under its original import name.
+        // fork instance under its original import name. The peer RANGE must
+        // stay at the upstream BASELINE version: 0.2.x app-boot's plugin
+        // compat gate validates every @deepseek-ai/dsh-* peer against the
+        // running runtime version (stock app-boot = the baseline), and a zw
+        // range never satisfies it — the whole plugin row gets disabled.
         const targetVersion = versionOf.get(dep)
         deps[dep] = field === 'peerDependencies'
-          ? targetVersion
+          ? upstreamVersion
           : `npm:${FORK_SCOPE}/${dep.slice(UPSTREAM_SCOPE.length + 1)}@${targetVersion}`
       } else if (typeof spec === 'string' && spec.startsWith('workspace:')) {
         // Non-fork workspace dep: keep the protocol's range shape against the
