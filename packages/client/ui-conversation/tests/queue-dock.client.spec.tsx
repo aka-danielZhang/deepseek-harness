@@ -98,7 +98,6 @@ const INPUT_STATE: InputState = { draft: '', attachmentIds: [], draftRev: 0, pha
 
 const t: QueueDockProps['t'] = makeTranslate(zh, commonZh)
 const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
-const useToolbarHosts: NonNullable<GlobalStandardProps['useToolbarHosts']> = selector => selector(null)
 
 function kitFor(snapshot: SessionSnapshot, injected: Partial<QueueDockInjected> = {}) {
   const renderText = createUserTextFixture()
@@ -111,8 +110,7 @@ function kitFor(snapshot: SessionSnapshot, injected: Partial<QueueDockInjected> 
     renderFactorySlot,
     t,
     usePanelInfo,
-    useToolbarHosts,
-    useSessions: (() => { throw new Error('unused') }) as unknown as SnapshotSelectorHook<SessionListState>,
+    useSessions: (() => { throw new Error('unused') }) as SnapshotSelectorHook<SessionListState>,
     useSessionRetainInfo: () => undefined,
     useResource,
     useSessionStatus: bindSnapshotSelector(

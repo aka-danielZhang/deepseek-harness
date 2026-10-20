@@ -210,19 +210,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     }
     /** Resident navigation container, including when no Session is selected. */
     'conversation.header': { kind: 'single'; scope: 'session-maybe' }
-    /**
-     * Leading seat before the Session breadcrumbs, portalled into the unified
-     * toolbar's title cluster when one is mounted (the in-place container's
-     * root-scoped `conversation.header.leading` serves plain-web layouts).
-     * The seat is laid out only while its occupant renders something, and it
-     * stays mounted through the blank-session state so a hidden sidebar always
-     * keeps a reopen control on screen.
-     */
-    'conversation.session.header.leading': {
-      kind: 'single'
-      scope: 'session'
-      owner: ConversationHeaderLeadingOwnerProps
-    }
     /** Strict per-Session title, actions, and View navigation. */
     'conversation.session.header': {
       kind: 'single'
@@ -588,8 +575,7 @@ export type ConversationHeaderProps =
 export type ConversationSessionHeaderSlotProps =
   PropsRuntime<'conversation.session.header'>
   & PropsRenderSlots<
-    'conversation.session.header.leading'
-    | 'conversation.session.header.lineage'
+    'conversation.session.header.lineage'
     | 'conversation.session.header.actions'
     | 'conversation.session.header.utilities'
     | 'conversation.session.header.corner'

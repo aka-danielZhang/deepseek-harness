@@ -13,7 +13,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
-import type { PanelInfo, ToolbarHosts } from './service.ts'
+import type { PanelInfo } from './service.ts'
 import { AppFrame } from './AppFrame.tsx'
 import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
@@ -27,13 +27,10 @@ import { ThemePresenter } from './theme-presenter.ts'
 // OwnerShare contracts below are the render-side halves registrants compose
 // against; the frame components and the store factory are package-internal.
 export { LayoutController } from './service.ts'
-export type { ILayout, MainPanelId, PanelInfo, ToolbarHosts } from './service.ts'
+export type { ILayout, MainPanelId, PanelInfo } from './service.ts'
 
 /** Selector hook over root-scoped panel selection. */
 export type UsePanelInfo = SnapshotSelectorHook<PanelInfo>
-
-/** Selector hook over the desktop toolbar's portal-host registration. */
-export type UseToolbarHosts = SnapshotSelectorHook<ToolbarHosts | null>
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -51,13 +48,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface GlobalStandardProps {
     /** Subscribe to the selected main panel independently of parent renders. */
     usePanelInfo: UsePanelInfo
-    /**
-     * Subscribe to the desktop toolbar's portal-host pair: null while no
-     * toolbar is mounted (the session header renders in place), the pair
-     * while one is (the header portals into it). Optional so compositions
-     * and test fixtures that never portal can omit it.
-     */
-    useToolbarHosts?: UseToolbarHosts
   }
 
   interface SlotMap {
@@ -81,19 +71,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * key hosts the Conversation; other keys receive no Session binding.
      */
     'main': { kind: 'keyed'; scope: 'root' }
-    /**
-     * The unified desktop toolbar row: the frame's first grid row spanning
-     * every column (macOS toolbar look with the native traffic lights inside
-     * its leading inset). OCCUPIED by the desktop bridge's DesktopToolbar,
-     * which renders the portal hosts the session header projects into.
-     *
-     * Session-maybe scope so the occupant receives the standard session
-     * shares (it derives the title/workspace face) while staying mounted
-     * across no-session/session transitions. With no occupant the row is an
-     * empty auto track — zero height — so plain web, Windows, and Linux
-     * layouts are pixel-identical to the single-row frame.
-     */
-    'shell.toolbar': { kind: 'single'; scope: 'session-maybe' }
     /**
      * The right column: a track the centre makes room for, or nothing. OCCUPIED
      * by the right Sidebar, which uses the resolved column width in normal
@@ -196,24 +173,12 @@ export function apply(ctx: ClientContext): void {
     }
     const layout = new LayoutController(instance.actions, id =>
       ctx.slots.entries('main').some(entry => entry.options.key === id), panelInfo)
-    // The toolbar-host registry mirrors onto the same root channel: the
-    // controller owns the pair and its listeners, the observable adapts it to
-    // the renderer's selector-hook cache (source identity is this object,
-    // snapshot identity is the stored pair reference).
-    const toolbarHosts: HostObservable<ToolbarHosts | null> = {
-      getSnapshot: () => layout.getToolbarHosts(),
-      subscribe: (listener) => {
-        const dispose = layout.onToolbarHosts(() => { listener() })
-        return dispose
-      },
-    }
-    const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo: layout.panelInfo, toolbarHosts } })
+    const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo: layout.panelInfo } })
     const disposeService = ctx.reflect.provide('layout', layout)
     const disposeRegistration = ctx.slots.register({
       name: 'root',
       locale: 'common',
       children: {
-        'shell.toolbar': { kind: 'single', scope: 'session-maybe' },
         'sidebar': { kind: 'single', scope: 'root' },
         'main': { kind: 'keyed', scope: 'root' },
         'rightbar': { kind: 'single', scope: 'root' },
