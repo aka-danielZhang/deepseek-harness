@@ -34,9 +34,11 @@ describe('fork package manifests', () => {
     expect(manifest.name).toBe('@crazx/dsh')
   })
 
-  it('keeps peer names with a semver requirement on the host-provided fork instance', () => {
+  it('keeps peer names with a baseline semver the 0.2.x compat gate can satisfy', () => {
+    // The range is the upstream BASELINE (the running runtime version the
+    // gate compares against), not the zw layer — see rewriteManifest.
     expect(rewrite({ peerDependencies: { '@deepseek-ai/dsh-tool-cordis': 'workspace:^' } }).peerDependencies)
-      .toEqual({ '@deepseek-ai/dsh-tool-cordis': '0.1.2-rc.1.zw.2' })
+      .toEqual({ '@deepseek-ai/dsh-tool-cordis': '0.1.2-rc.1' })
   })
 
   it('retains peer metadata under the same package name', () => {
