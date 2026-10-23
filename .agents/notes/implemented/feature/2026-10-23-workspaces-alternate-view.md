@@ -27,6 +27,14 @@ dsh-quno 的交互改版要求「Quno 独享侧栏页签、原有浏览区原样
 - cordis-client-runner 116 项全绿；`gen-client-catalog` 再生成后 `--check` 通过。
 - 全仓 `pnpm run build` 通过（client 编译聚合 + bundle）。
 
+## zw.7 增补（同日，按产品定稿样式规格与新会话语义）
+
+- 页签条升级为**分段 pill**：32px 行（2px 内距 + 28px 段）与侧栏行对齐、容器随 `--dsh-sidebar-inline-padding` 留白、激活段抬升底色（`--dsw-alias-bg-layer-1` + 柔和投影）、未激活段次级色、图标 + 文案居中（work 段用工作区树图标，备选段用 label 首字徽标）。
+- **页签跟随在屏主对话**：mainView 会话的 `agentPreset` 投影解析后——`'quno'` 激活备选页签，其余（stock 新会话在内）回落 work；投影未解析前不决策（迟到不误切）。每会话身份只决策一次；备选 dispose 的回落逻辑保留。
+- 测试支撑：test-runtime `setProjection` 镜像投影值进列表行（Host 列表每行携带 projectionValues，列表侧消费者从行读取），follow spec 据此断言两向跟随。
+- 验证：ui-workspace 全套 + 新增 follow spec 3/3 绿；全仓 build 过。发布 zw.7（发布前整仓重建）。
+
 ## 发布
 
 zw.5：发布集含 `@crazx/dsh-client-ui-workspace`（首次）与 `@crazx/dsh-cordis-client-runner`（首次），其余 fork 修改包按既定管线随 zw.5 重发。下游 dsh-desktop：`runtime/revision.json` 钉 `v0.2.1-rc.2+zw.5`，`prepare-runtime.mjs` FORK_MODIFIED 增补 ui-workspace 与 cordis-client-runner。
+（修订：zw.5 因主仓未重建发出陈旧 lib，已 deprecate 并由 zw.6 重发取代；zw.7 载上述样式与跟随增补，发布前已整仓重建。）

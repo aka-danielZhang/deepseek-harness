@@ -410,9 +410,16 @@ export class TestSessions implements ISessions {
   async setProjection(id: string, key: string, value: unknown): Promise<void> {
     const record = this.require(id)
     record.projections.set(key, value)
+    // Mirror into the catalog row: the Host list carries per-row
+    // projectionValues (SessionSummary.projectionValues), and list-driven
+    // consumers read them there rather than through the Session face.
+    const values = { ...(record.summary.projectionValues ?? {}), [key]: value }
+    const summary: SessionSummary = { ...record.summary, projectionValues: values as NonNullable<SessionSummary['projectionValues']> }
+    record.summary = summary
     await this.stabilize(() => {
       record.session.projections.set(key, value)
       this.generations.get(id as SessionId)?.session.projections.set(key, value)
+      this.list.update((draft) => { draft.byId[id as SessionId] = record.summary })
     })
   }
 

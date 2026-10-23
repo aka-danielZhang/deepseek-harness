@@ -1,5 +1,6 @@
-/* The work/alternate tab strip at the top of the browsing region. Token-only
- * styling, mirroring the shell's quiet chrome. */
+/* The work/alternate segmented pill at the top of the browsing region:
+ * native-sidebar chrome — 32px row aligned with the sidebar's rows, elevated
+ * active segment, tokens only. */
 
 .region {
   display: flex;
@@ -15,22 +16,32 @@
   min-height: 0;
 }
 
+/* The segmented pill: one 32px track (2px padding + 28px segments) inset by
+ * the sidebar's own inline padding, so the strip lines up with every row. */
 .tabs {
   display: flex;
-  gap: 4px;
-  padding: 6px 8px 2px;
+  flex: none;
+  gap: 2px;
+  margin: 4px var(--dsh-sidebar-inline-padding) 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
 }
 
 .tab {
   flex: 1;
   height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 999px;
   background: transparent;
   cursor: pointer;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .tab:hover {
@@ -38,9 +49,23 @@
 }
 
 .tab[data-active='true'] {
-  background: var(--dsw-alias-bg-layer-2);
+  background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-bg-base);
 }
 
 .railSwitch {
@@ -66,10 +91,4 @@
 
 .railButton[data-active='true'] {
   background: var(--dsw-alias-bg-layer-2);
-}
-
-.glyph {
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
 }

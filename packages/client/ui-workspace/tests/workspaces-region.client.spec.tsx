@@ -92,4 +92,42 @@ describe('WorkspacesRegion', () => {
     })
     expect(document.body.textContent).toContain('工作区')
   })
+
+  it('follows the on-screen conversation: a stock 新会话 returns to work, a quno main re-activates the alternate', async () => {
+    const runtime = await mountRegion()
+    await runtime.ctx.slots.inject('sidebar.workspaces.alternate', () => runtime.ctx.slots.register(
+      { name: 'sidebar.workspaces.alternate', id: 'quno', order: 10, label: 'Quno' },
+      () => <div data-testid="quno-alternate">Quno 视图</div>,
+    ))
+    await waitFor(() => {
+      expect(document.querySelector('[role="tablist"]')).not.toBeNull()
+    })
+    const tabs = () => document.querySelectorAll('[role="tab"]')
+    const alternateSelected = () => tabs()[1]!.getAttribute('aria-selected') === 'true'
+
+    // Open the alternate tab, then create a stock session (新会话 semantics:
+    // a new non-quno Session takes the main view) — the strip returns to work.
+    act(() => { fireEvent.click(tabs()[1]!) })
+    await waitFor(() => expect(document.querySelector('[data-testid="quno-alternate"]')).not.toBeNull())
+    await runtime.sessions.add({ id: 's-new' })
+    await runtime.sessions.setProjection('s-new', 'agentPreset', null)
+    // The main view holds exactly one Session: moving it means releasing the
+    // previous mainView retention, as the shell does.
+    const firstRef = runtime.sessions.retainFor(runtime.ctx, 's-new' as never, { source: 'mainView' })
+    await act(async () => { await Promise.resolve() })
+    await waitFor(() => expect(alternateSelected()).toBe(false))
+    expect(document.querySelector('[data-testid="quno-alternate"]')).toBeNull()
+
+    // The main view becoming a Quno main (preset projection 'quno') re-activates
+    // the alternate tab.
+    await runtime.sessions.add({ id: 's-quno' })
+    await runtime.sessions.setProjection('s-quno', 'agentPreset', 'quno')
+    await act(async () => {
+      firstRef.release()
+      runtime.sessions.retainFor(runtime.ctx, 's-quno' as never, { source: 'mainView' })
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(alternateSelected()).toBe(true))
+    expect(document.querySelector('[data-testid="quno-alternate"]')).not.toBeNull()
+  })
 })
