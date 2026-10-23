@@ -46,7 +46,8 @@ import {
 import { createWorkspaceShortcutControls, installWorkspaceShortcuts } from './shortcuts.ts'
 import { UiWorkspaceService } from './navigation.ts'
 import { createWorkspaceViewStore } from './stores.ts'
-import { WorkspaceBrowser } from './rows/WorkspaceBrowser.tsx'
+import { WorkspacesRegion } from './rows/WorkspacesRegion.tsx'
+import { createAlternateMetaSource } from './alternate-source.ts'
 import { ArchiveSessionMenuItem, ArchiveSessionRowButton, SessionArchiveConfirmDialog } from './session-actions/ArchiveSession.tsx'
 import { derive } from './session-actions/derived.ts'
 import { ForkSessionMenuItem } from './session-actions/ForkSession.tsx'
@@ -61,7 +62,8 @@ import { en, zh, type WorkspaceKey } from './locales.ts'
 export type { StartSessionOptions, UiWorkspace } from './navigation.ts'
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
-  MenuOpenState, RowToast, SessionRenameTarget, SessionRowOwnerProps, UseMenuOpenState, WorkspaceBrowserInjected,
+  MenuOpenState, RowToast, SessionRenameTarget, SessionRowOwnerProps, UseMenuOpenState, WorkspaceAlternateInjected,
+  WorkspaceAlternateMeta, WorkspaceAlternateOwnerProps, WorkspaceBrowserInjected,
   SessionRowScheduleOwnerProps,
   WorkspaceBrowserProps,
   WorkspacePickerInjected, WorkspacePickerProps,
@@ -281,7 +283,10 @@ export function apply(ctx: Context): void {
     requestAddWorkspace: shortcutControls.add,
     closeAddWorkspace: shortcutControls.closeAdd,
     setDirectoryBusy: shortcutControls.directoryBusy,
-    hooks: { directoryFlow: browserFlowSource, hostInfo, workspaceShortcuts: shortcutControls.state, shortcuts: ctx.shortcuts.catalog },
+    hooks: {
+      directoryFlow: browserFlowSource, hostInfo, workspaceShortcuts: shortcutControls.state,
+      shortcuts: ctx.shortcuts.catalog, alternate: alternateMeta.source,
+    },
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => workspaces.create(input),
@@ -289,10 +294,17 @@ export function apply(ctx: Context): void {
   })
   // Each registration declares its owned children in the same call; slot
   // injection follows both the owner and declaration HMR lifetimes.
+  // The region wrapper owns the alternate seat's live meta; it lives (and its
+  // registry subscription dies) with this entry's effect lifetime.
+  const alternateMeta = createAlternateMetaSource(ctx.slots)
+  ctx.effect(() => alternateMeta.dispose, 'ui-workspace: alternate seat meta')
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register(
     {
       name: 'sidebar.workspaces',
       children: {
+        'sidebar.workspaces.alternate': {
+          kind: 'list', scope: 'root', inject: { hooks: { alternate: alternateMeta.source } },
+        },
         'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' },
         // Every row entry reads the menu's open state through a hook bound
         // from the row's render occurrence (the owner passes the state pair
@@ -308,7 +320,7 @@ export function apply(ctx: Context): void {
       inject: browserInjected,
       locale: NS,
     },
-    WorkspaceBrowser,
+    WorkspacesRegion,
   ))
   // The shipped row actions take the same route as a plugin's: `slots.inject`
   // waits for the browser registration above to declare each list, and the

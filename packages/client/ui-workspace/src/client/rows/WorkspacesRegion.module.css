@@ -1,0 +1,75 @@
+/* The work/alternate tab strip at the top of the browsing region. Token-only
+ * styling, mirroring the shell's quiet chrome. */
+
+.region {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px 2px;
+}
+
+.tab {
+  flex: 1;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.tab:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tab[data-active='true'] {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.railSwitch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+}
+
+.railButton {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--dsw-alias-label-primary);
+}
+
+.railButton[data-active='true'] {
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.glyph {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}

@@ -136,6 +136,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     insertWorkspaceBefore: vi.fn(async () => {}),
     createWorkspace: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
+    useAlternate: hook({ occupied: false, label: () => '' }),
     useHostInfo: selector => selector({ home: undefined, isLoopback: true }),
     renderSlot: renderDirectoryFlowOnly,
     t,

@@ -113,6 +113,33 @@ export interface SessionRowScheduleOwnerProps {
   readonly sessionId: SessionId
 }
 
+/** Owner share of one alternate browsing view (a composed tab beside the browser). */
+export interface WorkspaceAlternateOwnerProps {
+  /** Whether this view is the region's active tab (the browser renders otherwise). */
+  readonly active: boolean
+}
+
+/**
+ * What the region tells an alternate about itself. The meta is the region's
+ * own read of the seat: whether any alternate is registered (the tab strip
+ * exists only while one is) and that entry's display label, re-read per
+ * render so a localized label follows the active locale.
+ */
+export interface WorkspaceAlternateMeta {
+  /** Whether the `sidebar.workspaces.alternate` seat has an entry. */
+  readonly occupied: boolean
+  /** The first entry's display label; '' when the seat is empty. */
+  readonly label: () => string
+}
+
+/** Injected share the region hands every alternate entry. */
+export interface WorkspaceAlternateInjected {
+  hooks: {
+    /** The region's live read of the alternate seat. */
+    alternate: HostObservable<WorkspaceAlternateMeta>
+  }
+}
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
     /** Directory-flow hole under the conversation empty-state picker (declared by the WorkspacePicker entry). */
@@ -134,6 +161,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * its trailing status line. Mounted only while that card is open.
      */
     'sidebar.session.row.hover': { kind: 'list'; scope: 'root'; owner: SessionRowScheduleOwnerProps }
+    /**
+     * An alternate browsing view composed beside the browser (a 「work / Quno」
+     * tab pair at the top of the region). The region renders the tab strip
+     * only while this seat has an entry, and mounts an entry only while its
+     * tab is active, so an absent or disposed alternate leaves the region
+     * byte-identical to the stock browser. The first entry (lowest
+     * registration order) is the one shown; more than one is a composition
+     * mistake the region resolves by that same order rather than an error.
+     */
+    'sidebar.workspaces.alternate': { kind: 'list'; scope: 'root'; owner: WorkspaceAlternateOwnerProps; inject: WorkspaceAlternateInjected }
     /**
      * The rows of one Session's "..." menu, in ascending `order`. ui-workspace
      * registers the shipped rows here — `pin` (100), `rename` (200), `fork`
@@ -228,6 +265,8 @@ export type WorkspaceBrowserInjected = {
     hostInfo: HostObservable<RemoteHostFacts>
     workspaceShortcuts: HostObservable<WorkspaceShortcutState>
     shortcuts: HostObservable<readonly ShortcutCatalogEntry[]>
+    /** The alternate seat's live meta; consumed by the region wrapper. */
+    alternate: HostObservable<WorkspaceAlternateMeta>
   }
   /** Open the browser search and focus its input. */
   requestSearch: () => void
@@ -500,3 +539,12 @@ export type WorkspacePickerProps =
   & Omit<WorkspacePickerInjected, 'hooks'>
   & PropsHooks<WorkspacePickerInjected['hooks']>
   & PropsLocale<'workspace'>
+
+/**
+ * Props of the region wrapper: the browser's full share (it renders as one
+ * tab, and its injected hooks carry the alternate seat's live meta) plus the
+ * alternate seat it switches to.
+ */
+export type WorkspacesRegionProps =
+  WorkspaceBrowserProps
+  & PropsRenderSlots<'sidebar.workspaces.alternate'>
