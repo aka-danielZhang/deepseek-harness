@@ -230,18 +230,19 @@ export function pinCurrentBlank(
 export type ArchivedFilter = 'default' | 'show' | 'only'
 
 /**
- * Ordinary sessions are visible; among blank sessions, only the current one
- * is visible. Subagent children use their parent header catalog; archived
- * sessions follow the archived filter, while their accounting slots remain
- * either way so unarchiving restores position.
+ * Contributor filters and ordinary Sessions are visible; among blank Sessions,
+ * only the current one is visible. Subagent children use their parent header
+ * catalog; archived Sessions follow the archived filter, while their accounting
+ * slots remain either way so unarchiving restores position.
  */
 function sessionVisible(
   session: SessionSummary,
   current: SessionId | undefined,
   archived: ReadonlySet<SessionId>,
   archivedFilter: ArchivedFilter,
+  acceptSession?: (session: SessionSummary) => boolean,
 ): boolean {
-  if (session.origin === 'subagent') return false
+  if (acceptSession?.(session) === false || session.origin === 'subagent') return false
   if (session.blank && session.id !== current) return false
   switch (archivedFilter) {
     case 'default':
@@ -337,6 +338,7 @@ function groupByWorkspace(
   archived: ReadonlySet<SessionId>,
   archivedFilter: ArchivedFilter,
   ungroupedOrder: readonly string[] | undefined,
+  acceptSession?: (session: SessionSummary) => boolean,
 ): Group[] {
   const current = mainSessionId(list)
   const groups: Group[] = []
@@ -347,7 +349,7 @@ function groupByWorkspace(
       const summary = list.byId[id]
       if (summary === undefined) continue // account may lead the list pull; the row appears when the summary lands
       accounted.add(id)
-      if (!sessionVisible(summary, current, archived, archivedFilter)) continue
+      if (!sessionVisible(summary, current, archived, archivedFilter, acceptSession)) continue
       members.push(summary)
     }
     // The archived-only view lists archives, not the Workspace inventory, so
@@ -361,7 +363,7 @@ function groupByWorkspace(
   const stray = list.ids
     .map(id => list.byId[id])
     .filter((s): s is SessionSummary =>
-      s !== undefined && !accounted.has(s.id) && sessionVisible(s, current, archived, archivedFilter))
+      s !== undefined && !accounted.has(s.id) && sessionVisible(s, current, archived, archivedFilter, acceptSession))
   if (stray.length > 0) {
     groups.push(buildGroup(
       UNGROUPED_KEY,
@@ -431,6 +433,7 @@ function sessionNode(
  * @param rowState - registry-global pin and archive sets plus the archived filter.
  * @param statuses - unified UI status by Session.
  * @param view - local expansion arrays.
+ * @param acceptSession - contributor predicate applied before a Session joins a group.
  * @returns group sections in render order.
  */
 export function deriveGroups(
@@ -439,6 +442,7 @@ export function deriveGroups(
   rowState: SessionRowState,
   statuses: SessionStatuses,
   view: TreeView,
+  acceptSession?: (session: SessionSummary) => boolean,
 ): GroupNode[] {
   const archived = new Set(rowState.archivedSessionIds)
   const pinned = new Set(rowState.pinnedSessionIds)
@@ -448,7 +452,7 @@ export function deriveGroups(
     ? undefined
     : owningGroupKey(workspaces, current)
   const groups: GroupNode[] = []
-  for (const g of groupByWorkspace(list, workspaces, archived, rowState.archivedFilter, view.ungroupedOrder)) {
+  for (const g of groupByWorkspace(list, workspaces, archived, rowState.archivedFilter, view.ungroupedOrder, acceptSession)) {
     const expanded = expandedGroups.has(g.key)
     groups.push({
       key: g.key,
@@ -471,10 +475,11 @@ export function deriveGroups(
 /**
  * Select complete flat-list membership, independently of archive visibility.
  * @param list - sessions list snapshot.
+ * @param acceptSession - contributor predicate applied before row membership.
  * @returns known ordinary Session ids, including archives and only the current blank.
  */
-export function sessionMemberIds(list: SessionListState): SessionId[] {
-  return visibleSessionIds(list, [], 'show')
+export function sessionMemberIds(list: SessionListState, acceptSession?: (session: SessionSummary) => boolean): SessionId[] {
+  return visibleSessionIds(list, [], 'show', acceptSession)
 }
 
 /**
@@ -482,18 +487,20 @@ export function sessionMemberIds(list: SessionListState): SessionId[] {
  * @param list - sessions list snapshot.
  * @param archivedSessionIds - registry-global archive set.
  * @param archivedFilter - archived-row visibility choice.
+ * @param acceptSession - contributor predicate applied before row membership.
  * @returns known visible Session ids in list order, including ordinary forks and only the current blank.
  */
 export function visibleSessionIds(
   list: SessionListState,
   archivedSessionIds: readonly SessionId[],
   archivedFilter: ArchivedFilter,
+  acceptSession?: (session: SessionSummary) => boolean,
 ): SessionId[] {
   const archived = new Set(archivedSessionIds)
   const current = mainSessionId(list)
   return list.ids.filter((id) => {
     const s = list.byId[id]
-    return s !== undefined && sessionVisible(s, current, archived, archivedFilter)
+    return s !== undefined && sessionVisible(s, current, archived, archivedFilter, acceptSession)
   })
 }
 
@@ -504,6 +511,7 @@ export function visibleSessionIds(
  * @param sessionIds - complete account members in the selected order, including hidden archives.
  * @param rowState - registry-global pin and archive sets plus the archived filter.
  * @param statuses - unified UI status by Session.
+ * @param acceptSession - contributor predicate applied before a Session becomes a flat row.
  * @returns flat rows in sectioned order with current status indicators.
  */
 export function deriveFlat(
@@ -511,13 +519,14 @@ export function deriveFlat(
   sessionIds: readonly SessionId[],
   rowState: SessionRowState,
   statuses: SessionStatuses,
+  acceptSession?: (session: SessionSummary) => boolean,
 ): SessionNode[] {
   const archived = new Set(rowState.archivedSessionIds)
   const pinned = new Set(rowState.pinnedSessionIds)
   const current = mainSessionId(list)
   const members = sessionIds.flatMap((id) => {
     const session = list.byId[id]
-    return session !== undefined && sessionVisible(session, current, archived, rowState.archivedFilter)
+    return session !== undefined && sessionVisible(session, current, archived, rowState.archivedFilter, acceptSession)
       ? [session]
       : []
   })
@@ -537,6 +546,7 @@ export function deriveFlat(
  * @param statuses - unified UI status by Session.
  * @param content - ranked Host content-search page.
  * @param limit - protocol-owned maximum merged row count.
+ * @param acceptSession - contributor predicate applied before a result is included.
  * @returns bounded deduplicated flat rows and a refine-query hint bit.
  */
 export function deriveSearchResults(
@@ -548,6 +558,7 @@ export function deriveSearchResults(
   statuses: SessionStatuses,
   content: { items: readonly SessionSearchResultItem[]; hasMore: boolean },
   limit: number,
+  acceptSession?: (session: SessionSummary) => boolean,
 ): SearchResultSet {
   const q = query.trim().toLowerCase()
   if (q === '') return { items: [], hasMore: false }
@@ -572,7 +583,7 @@ export function deriveSearchResults(
     const summary = list.byId[id]
     // Blank placeholders never match a query (their canonical title displays
     // localized, so matching it would tie search to one language).
-    if (summary === undefined || summary.blank || !sessionVisible(summary, current, archived, archivedFilter)) continue
+    if (summary === undefined || summary.blank || !sessionVisible(summary, current, archived, archivedFilter, acceptSession)) continue
     if (
       sessionTitle(summary).toLowerCase().includes(q)
       || labelOf(summary).toLowerCase().includes(q)
@@ -594,7 +605,8 @@ export function deriveSearchResults(
   for (const summary of orderedLocal) include(summary)
   for (const item of content.items) {
     const summary = list.byId[item.sessionId]
-    if (summary !== undefined && !summary.blank && sessionVisible(summary, current, archived, archivedFilter)) include(summary)
+    if (summary !== undefined && !summary.blank
+      && sessionVisible(summary, current, archived, archivedFilter, acceptSession)) include(summary)
   }
 
   return {

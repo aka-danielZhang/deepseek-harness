@@ -332,9 +332,15 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'uiWorkspace',
-    summary: 'Workspace archive and directory operations consumed by Client UI domains.',
-    description: 'Workspace archive and directory operations consumed by Client UI domains.',
+    summary: 'Workspace archive, directory, and browsing-view operations consumed by Client UI domains.',
+    description: 'Workspace archive, directory, and browsing-view operations consumed by Client UI domains.',
     methods: [
+      {
+        signature: 'registerSessionVisibilityFilter(filter: WorkspaceSessionVisibilityFilter): () => void',
+        description: 'Register a contributor-owned Session visibility predicate.',
+        parameters: [{ name: 'filter', description: 'false hides the Session from grouped, flat, and search views.' }],
+        returns: 'an idempotent disposer that removes only this registration.',
+      },
       {
         signature: 'openSession(target: SessionTarget): void',
         description: 'Select a Session and show its Conversation as one UI navigation action.',
@@ -1078,6 +1084,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UseFactorySlot',
     declaration: 'export type UseFactorySlot<F extends keyof SlotFactoryMap & string> = <N extends FactoryLocalNameOf<F>>(name: N, fallback: FactoryLocalComponent<F, N>) => SlotComponent<FactoryLocalInputPropsOf<F, N>>;',
+  },
+  {
+    name: 'WorkspaceSessionVisibilityFilter',
+    declaration: 'export type WorkspaceSessionVisibilityFilter = (session: SessionSummary) => boolean;',
   },
   {
     name: 'WorkspaceView',

@@ -46,7 +46,7 @@ import type {
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
-import type { SessionSearchResultItem } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionSearchResultItem, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionActivity, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -267,7 +267,11 @@ export type WorkspaceBrowserInjected = {
     shortcuts: HostObservable<readonly ShortcutCatalogEntry[]>
     /** The alternate seat's live meta; consumed by the region wrapper. */
     alternate: HostObservable<WorkspaceAlternateMeta>
+    /** Registration revision that makes browsing views recompute contributed visibility. */
+    sessionVisibility: HostObservable<number>
   }
+  /** Evaluate the currently registered contributor predicates for one Session. */
+  acceptSession: (session: SessionSummary) => boolean
   /** Open the browser search and focus its input. */
   requestSearch: () => void
   /** Request the existing directory picker. */

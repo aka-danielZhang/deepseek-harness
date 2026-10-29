@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-29-workspace-session-visibility.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-29-workspace-session-visibility.md
+/agent-note-contributor-owned-workspace-session-visibility:
+  en: c08db7feb7fb3d0e
+  zh: 6a2d9cade1d8d658
+/agent-note-contributor-owned-workspace-session-visibility/problem:
+  en: 0373ce7a5ead7efa
+  zh: 8d13c6987512a3e2
+/agent-note-contributor-owned-workspace-session-visibility/decision:
+  en: 6da59d62a11d58ef
+  zh: f8eb7be8e9f9a221
+/agent-note-contributor-owned-workspace-session-visibility/alternatives-considered:
+  en: 95683e1b8c3b2221
+  zh: 167646dbd69324d8
+/agent-note-contributor-owned-workspace-session-visibility/consequences:
+  en: c7c96bc9a4502d73
+  zh: b23b269d100b3c3b

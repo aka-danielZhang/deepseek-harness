@@ -23,6 +23,7 @@ import type { DraftInitializationOptions } from '@deepseek-ai/dsh-client-ui-conv
 import type { RowToast } from './contract/slots.ts'
 import { pinOrderAccounts, pinOrderSource } from './pin-order.ts'
 import type { WorkspaceViewStoreActions } from './stores.ts'
+import { WorkspaceSessionVisibility, type WorkspaceSessionVisibilityFilter } from './session-visibility.ts'
 
 interface MainSelection {
   readonly sessionId?: SessionId
@@ -35,8 +36,14 @@ export interface StartSessionOptions extends DraftInitializationOptions {
   readonly agentPreset?: string
 }
 
-/** Workspace archive and directory operations consumed by Client UI domains. */
+/** Workspace archive, directory, and browsing-view operations consumed by Client UI domains. */
 export interface UiWorkspace {
+  /**
+   * Register a contributor-owned Session visibility predicate.
+   * @param filter - false hides the Session from grouped, flat, and search views.
+   * @returns an idempotent disposer that removes only this registration.
+   */
+  registerSessionVisibilityFilter(filter: WorkspaceSessionVisibilityFilter): () => void
   /**
    * Select a Session and show its Conversation as one UI navigation action.
    * @param target - known Session identity or durable direct-parent subagent address to display.
@@ -148,7 +155,7 @@ export class DirectoryBrowseError extends Error {
   }
 }
 
-/** Implements Workspace archive and directory UI operations. */
+/** Implements Workspace archive, directory, and browsing-view operations. */
 class UiWorkspaceService extends Service implements UiWorkspace {
   /** The latest in-flight connection per Workspace; a request joins it only when both name the same preset. */
   private readonly connecting = new Map<WorkspaceId, {
@@ -159,6 +166,11 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   private readonly selection = createSnapshotStore<MainSelection>(
     {}, { persist: { name: 'dsh.sessions.current' } },
   )
+  private readonly visibility = new WorkspaceSessionVisibility()
+  /** Live registration revision consumed by all browsing derivations. */
+  readonly sessionVisibilityRevision = this.visibility.revision
+  /** Evaluate the currently registered predicates for one Session summary. */
+  readonly acceptSession = this.visibility.accept
   private mainReference: SessionReference | undefined
 
   /**
@@ -188,6 +200,10 @@ class UiWorkspaceService extends Service implements UiWorkspace {
         reference?.release()
       }
     }, 'ui-workspace: Workspace navigation policy')
+  }
+
+  registerSessionVisibilityFilter(filter: WorkspaceSessionVisibilityFilter): () => void {
+    return this.visibility.register(filter)
   }
 
   connectWorkspace(workspaceId: WorkspaceId, options: Pick<StartSessionOptions, 'agentPreset'> = {}): Promise<SessionId> {

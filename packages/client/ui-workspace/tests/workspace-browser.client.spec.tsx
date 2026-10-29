@@ -3,6 +3,7 @@ import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { allowAllAccess, bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
   WorkspaceId, WorkspaceSnapshot, WorkspaceView,
@@ -135,6 +136,8 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     unarchiveSession: vi.fn(async () => {}),
     insertWorkspaceBefore: vi.fn(async () => {}),
     createWorkspace: vi.fn(async () => workspace('created', [])),
+    acceptSession: () => true,
+    useSessionVisibility: hook(0),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     useAlternate: hook({ occupied: false, label: () => '' }),
     useHostInfo: selector => selector({ home: undefined, isLoopback: true }),
@@ -433,6 +436,58 @@ describe('WorkspaceBrowser', () => {
       if (previous === null) localStorage.removeItem(key)
       else localStorage.setItem(key, previous)
     }
+  })
+
+  it('recomputes contributed visibility in grouped, flat, and search views', async () => {
+    const visibility = createSnapshotStore(0)
+    let acceptQuno = false
+    const acceptSession = (session: SessionSummary): boolean =>
+      acceptQuno || session.projectionValues?.agentPreset !== 'quno'
+    const searchSessions = vi.fn(async () => ({
+      items: [{ sessionId: sid('quno-main'), snippet: 'session content' }],
+      hasMore: false,
+    }))
+    const b = mount({
+      useSessions: hook(sessionState([
+        summary('ordinary-session', 3),
+        summary('quno-main', 2, {
+          title: 'assistant', displayTitle: 'assistant',
+          projectionValues: { agentPreset: 'quno' },
+        }),
+        summary('child-session', 1, { origin: 'subagent' }),
+      ])),
+      useWorkspaces: hook(workspaceState([
+        workspace('alpha', ['ordinary-session', 'quno-main', 'child-session']),
+      ])),
+      acceptSession,
+      useSessionVisibility: bindSnapshotSelector(visibility),
+      searchSessions,
+    })
+    fireEvent.click(screen.getByText('alpha'))
+    expect(screen.getByText('ordinary-session')).toBeTruthy()
+    expect(screen.queryByText('assistant')).toBeNull()
+    expect(screen.queryByText('child-session')).toBeNull()
+
+    b.store.actions.setGroupBy('flat')
+    expect(screen.getByText('ordinary-session')).toBeTruthy()
+    expect(screen.queryByText('assistant')).toBeNull()
+    expect(screen.queryByText('child-session')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '搜索会话' }))
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'session' } })
+    await waitFor(() => expect(searchSessions).toHaveBeenCalled())
+    expect(screen.getByText('ordinary-session')).toBeTruthy()
+    expect(screen.queryByText('assistant')).toBeNull()
+    expect(screen.queryByText('child-session')).toBeNull()
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    acceptQuno = true
+    act(() => { visibility.set(1) })
+    await waitFor(() => expect(screen.getByText('assistant')).toBeTruthy())
+    b.store.actions.setGroupBy('workspace')
+    expect(screen.getByText('assistant')).toBeTruthy()
+    expect(screen.queryByText('child-session')).toBeNull()
   })
 
   it('renders the grouped tree by default and switches to the flat list via Group by', () => {

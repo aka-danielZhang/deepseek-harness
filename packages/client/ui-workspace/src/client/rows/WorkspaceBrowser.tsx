@@ -253,7 +253,7 @@ function workspaceGroupHalf(e: { clientY: number; currentTarget: HTMLElement }):
 type SessionTreeProps = Pick<
   WorkspaceBrowserProps,
   'useSessionStatus' | 'startSession' | 'open'
-  | 'insertWorkspaceBefore' | 't' | 'usePanelInfo'
+  | 'insertWorkspaceBefore' | 't' | 'usePanelInfo' | 'acceptSession' | 'useSessionVisibility'
 > & PropsRenderSlots<
   | 'sidebar.workspaces.session.menu.item'
   | 'sidebar.workspaces.session.row.action'
@@ -323,10 +323,11 @@ function SessionTree({
   insertWorkspaceBefore,
   nestWorkspaces, groupExpansion, setGroupExpanded,
   setSessionOrder, home, t,
-  revealSessionId, onSessionRevealed, shortcuts,
+  revealSessionId, onSessionRevealed, shortcuts, acceptSession, useSessionVisibility,
 }: SessionTreeProps) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
   const statuses = useSessionStatus(s => s)
+  const visibilityRevision = useSessionVisibility(value => value)
   const current = panelActive
     ? undefined
     : Object.values(list.byId).find(session => (session.retainedBy.mainView ?? 0) > 0)?.id
@@ -376,8 +377,8 @@ function SessionTree({
     () => deriveGroups(list, workspaces, rowState, statuses, {
       expandedGroups,
       ungroupedOrder: ungroupedSessionIds,
-    }),
-    [list, workspaces, rowState, statuses, expandedGroups, ungroupedSessionIds],
+    }, acceptSession),
+    [list, workspaces, rowState, statuses, expandedGroups, ungroupedSessionIds, acceptSession, visibilityRevision],
   )
   useEffect(() => {
     for (let key = revealGroup; key !== undefined; key = parents.get(key)) {
@@ -689,7 +690,7 @@ function SessionTree({
 function FlatList({
   list, sessionIds, rowState, onLeaveArchivedOnly, useSessionStatus, open, onSessionRenameRequest,
   usePanelInfo, setSessionOrder, workspaceReady, animationResetKey,
-  revealSessionId, onSessionRevealed, renderSlot, t,
+  revealSessionId, onSessionRevealed, renderSlot, t, acceptSession, useSessionVisibility,
 }: Pick<
   SessionTreeProps,
   | 'useSessionStatus'
@@ -705,15 +706,18 @@ function FlatList({
   | 'rowState'
   | 'onLeaveArchivedOnly'
   | 't'
+  | 'acceptSession'
+  | 'useSessionVisibility'
 > & {
   list: SessionListState
   sessionIds: readonly SessionId[]
 }) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
   const statuses = useSessionStatus(s => s)
+  const visibilityRevision = useSessionVisibility(value => value)
   const rows = useMemo(
-    () => deriveFlat(list, sessionIds, rowState, statuses),
-    [list, sessionIds, rowState, statuses],
+    () => deriveFlat(list, sessionIds, rowState, statuses, acceptSession),
+    [list, sessionIds, rowState, statuses, acceptSession, visibilityRevision],
   )
   const [drag, setDrag] = useState<DragState | null>(null)
   const dropCommitted = useRef(false)
@@ -809,7 +813,9 @@ function SearchResults({
   resultLimit,
   usePanelInfo,
   t,
-}: Pick<WorkspaceBrowserProps, 'useSessions' | 'useSessionStatus' | 'open' | 't' | 'usePanelInfo'> & {
+  acceptSession,
+  useSessionVisibility,
+}: Pick<WorkspaceBrowserProps, 'useSessions' | 'useSessionStatus' | 'open' | 't' | 'usePanelInfo' | 'acceptSession' | 'useSessionVisibility'> & {
   workspaces: readonly WorkspaceView[]
   archivedSessionIds: readonly SessionNode['id'][]
   /** Search matches follow the archived filter selected for the list. */
@@ -823,6 +829,7 @@ function SearchResults({
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
   const list = useSessions(s => s)
   const statuses = useSessionStatus(s => s)
+  const visibilityRevision = useSessionVisibility(value => value)
   const currentRemote = remote.query === query
     ? remote
     : { query, status: 'loading' as const, items: [], hasMore: false }
@@ -836,8 +843,9 @@ function SearchResults({
       statuses,
       currentRemote,
       resultLimit,
+      acceptSession,
     ),
-    [list, workspaces, query, archivedSessionIds, archivedFilter, statuses, currentRemote, resultLimit],
+    [list, workspaces, query, archivedSessionIds, archivedFilter, statuses, currentRemote, resultLimit, acceptSession, visibilityRevision],
   )
   const pending = currentRemote.status === 'loading'
   const currentId = panelActive
@@ -911,12 +919,14 @@ export function WorkspaceBrowser({
   insertWorkspaceBefore,
   unarchiveSession,
   createWorkspace,
+  acceptSession,
   searchSessions,
   searchResultLimit,
   useDirectoryFlow,
   useHostInfo,
   useShortcuts,
   useWorkspaceShortcuts,
+  useSessionVisibility,
   requestSearch,
   requestAddWorkspace,
   closeAddWorkspace,
@@ -931,6 +941,7 @@ export function WorkspaceBrowser({
   const shortcutState = useWorkspaceShortcuts(state => state)
   // Ordering remains live while the rail or search replaces the list body.
   const list = useSessions(state => state)
+  const visibilityRevision = useSessionVisibility(value => value)
   const storedWorkspaces = useWorkspaces(state => state.items)
   // The resolved name, not `t`, is the memo dependency: the bound seat keeps
   // its identity across a language switch.
@@ -984,7 +995,10 @@ export function WorkspaceBrowser({
     () => ({ ...orderState, archivedFilter }),
     [orderState, archivedFilter],
   )
-  const flatMemberIds = useMemo(() => sessionMemberIds(list), [list])
+  const flatMemberIds = useMemo(
+    () => sessionMemberIds(list, acceptSession),
+    [list, acceptSession, visibilityRevision],
+  )
   const orderedWorkspaces = useMemo(() => workspaces.map((workspace) => {
     const memberIds = workspace.sessionIds
     const baseOrder = orderBy === 'updated'
@@ -1406,6 +1420,8 @@ export function WorkspaceBrowser({
               usePanelInfo={usePanelInfo}
               useSessions={useSessions}
               useSessionStatus={useSessionStatus}
+              acceptSession={acceptSession}
+              useSessionVisibility={useSessionVisibility}
               open={openSearchResult}
               onUnarchive={onSessionUnarchive}
               workspaces={workspaces}
@@ -1428,6 +1444,8 @@ export function WorkspaceBrowser({
                 workspaceReady={workspaceReady}
                 animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}`}
                 useSessionStatus={useSessionStatus}
+                acceptSession={acceptSession}
+                useSessionVisibility={useSessionVisibility}
                 open={guardedOpen}
                 onSessionRenameRequest={requestSessionRename}
                 renderSlot={renderSlot}
@@ -1443,6 +1461,8 @@ export function WorkspaceBrowser({
                 list={list}
                 shortcuts={shortcuts}
                 useSessionStatus={useSessionStatus}
+                acceptSession={acceptSession}
+                useSessionVisibility={useSessionVisibility}
                 onSessionRenameRequest={requestSessionRename}
                 renderSlot={renderSlot}
                 workspaces={orderedWorkspaces}

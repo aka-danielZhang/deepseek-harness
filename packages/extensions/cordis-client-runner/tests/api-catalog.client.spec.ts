@@ -22,6 +22,7 @@ describe('Client Cordis inspect catalog', () => {
       ])
     expect(SERVICE_API.find(service => service.key === 'uiWorkspace')?.methods.map(method => method.signature))
       .toEqual([
+        'registerSessionVisibilityFilter(filter: WorkspaceSessionVisibilityFilter): () => void',
         'openSession(target: SessionTarget): void',
         'openWorkspace( workspaceId: WorkspaceId, beforeOpen?: (sessionId: SessionId) => void, options?: Pick<StartSessionOptions, \'agentPreset\'>, ): Promise<void>',
         'forkSession( sessionId: SessionId, onCreated?: (childId: SessionId) => void, options?: Pick<Parameters<ISessions[\'fork\']>[0], \'allowMigration\'>, ): Promise<SessionId>',
