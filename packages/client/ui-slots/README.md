@@ -43,6 +43,8 @@ An open-key standard Hook, called as `useName(key, selector?, equal?)`, also acc
 
 A register call may declare a store seat with `store: defineStore(...)`: `init` infers the state schema and `actions` is the complete draft-transform write set. Components read through the selector hook and write through the baked callbacks; the engine implementation of `defineStore` lives in the runtime package and satisfies the `DefineStore` contract exported here.
 
+A slot may also declare the extra registration options it accepts (`options` on its `SlotMap` entry). A registrant passes them beside the kind fields (`id`/`order`/`label` for a list entry), and the core copies them verbatim into the stored entry's `options` bag so the owning entry can project them into its own metadata. The core never interprets them, and a slot that declares none keeps the historical option shape.
+
 ### Declaration discipline
 
 Declaring a slot is claiming it: the registering entry becomes the only entry allowed to render that key, and registering into an undeclared slot, declaring an already-declared child, mounting one shared handle under two scopes, or registering a chain without `select` throws at load. An entry's disposer collapses its declared child slots recursively — ledger rows, contributions, and store mounts die on one lifecycle axis.

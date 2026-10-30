@@ -85,6 +85,8 @@ interface TestPanel {
   heading: string
   order?: number
   label?: SlotLabel
+  /** Conversation this row stands for (slots.ts SidebarPanelOptions). */
+  conversationAgentPreset?: string
 }
 
 async function mountPanel(runtime: SlotTestRuntime, { heading, ...metadata }: TestPanel) {
@@ -275,5 +277,152 @@ describe('sidebar global panels', () => {
     expect(view.getByRole('heading', { name: 'Alpha content' })).toBeTruthy()
     act(() => { locale.setLocale('zh') })
     expect(view.queryByRole('navigation')).toBeNull()
+  })
+})
+
+/** A row that stands for one Conversation (`conversationAgentPreset`). */
+const QUNO = 'sidebar-test-quno' as MainPanelId
+const QUNO_CLAIM = 'sidebar-test-quno-second' as MainPanelId
+
+describe('sidebar conversation-owned rows', () => {
+  async function mountOwned(runtime: SlotTestRuntime, overrides: Partial<TestPanel> = {}) {
+    return mountPanel(runtime, {
+      id: QUNO, heading: 'Quno content', label: 'Quno', conversationAgentPreset: 'quno', ...overrides,
+    })
+  }
+
+  /** Publish one mainView Session with the given `agentPreset` projection. */
+  async function openMainView(runtime: SlotTestRuntime, id: string, preset: string | null | undefined) {
+    await runtime.sessions.add({ id })
+    if (preset !== undefined) await runtime.sessions.setProjection(id, 'agentPreset', preset)
+    return act(async () => {
+      const reference = runtime.sessions.retainFor(runtime.ctx, id as never, { source: 'mainView' })
+      await Promise.resolve()
+      return reference
+    })
+  }
+
+  /** Move the on-screen Session to a replacement, releasing the previous reference. */
+  async function moveMainView(
+    runtime: SlotTestRuntime,
+    previous: { release(): void },
+    id: string,
+    preset: string | null | undefined,
+  ) {
+    if (runtime.sessions.list.getSnapshot().byId[id as never] === undefined) await runtime.sessions.add({ id })
+    if (preset !== undefined) await runtime.sessions.setProjection(id, 'agentPreset', preset)
+    return act(async () => {
+      previous.release()
+      const reference = runtime.sessions.retainFor(runtime.ctx, id as never, { source: 'mainView' })
+      await Promise.resolve()
+      return reference
+    })
+  }
+
+  it('selects the row that stands for the on-screen conversation after a hand-off', async () => {
+    const { runtime, view } = await bench()
+    await mountOwned(runtime)
+    const row = await view.findByRole('button', { name: 'Quno' })
+    // No panel is selected and nothing was clicked: the row reads from the Session.
+    expect(row.getAttribute('aria-current')).toBeNull()
+    expect(runtime.panelInfo.getSnapshot()).toEqual({ activePanelId: null })
+
+    await openMainView(runtime, 's-quno', 'quno')
+    await waitFor(() => { expect(row.getAttribute('aria-current')).toBe('page') })
+    expect(within(row).getByTestId(`${QUNO}-icon`).getAttribute('data-active')).toBe('true')
+    // The hand-off's layout state is untouched: the Conversation is on screen.
+    expect(runtime.panelInfo.getSnapshot()).toEqual({ activePanelId: null })
+    expect(view.getByText('Conversation content')).toBeTruthy()
+  })
+
+  it('keeps a global panel selected while a background conversation resolves the same preset', async () => {
+    const { runtime, locale, layout, view } = await bench()
+    await mountPanels(runtime, locale)
+    await mountOwned(runtime)
+    await openMainView(runtime, 's-quno', 'quno')
+    const qunoRow = view.getByRole('button', { name: 'Quno' })
+    await waitFor(() => { expect(qunoRow.getAttribute('aria-current')).toBe('page') })
+
+    fireEvent.click(view.getByRole('button', { name: 'Alpha panel' }))
+    expect(layout.selectPanel).toHaveBeenLastCalledWith(ALPHA)
+    const alphaRow = view.getByRole('button', { name: 'Alpha panel' })
+    expect(alphaRow.getAttribute('aria-current')).toBe('page')
+    expect(qunoRow.getAttribute('aria-current')).toBeNull()
+    expect(within(qunoRow).getByTestId(`${QUNO}-icon`).getAttribute('data-active')).toBe('false')
+    expect(view.getByRole('heading', { name: 'Alpha content' })).toBeTruthy()
+  })
+
+  it('follows the on-screen conversation between a stock Session and a preset one', async () => {
+    const { runtime, view } = await bench()
+    await mountOwned(runtime)
+    const row = await view.findByRole('button', { name: 'Quno' })
+
+    let reference = await openMainView(runtime, 's-quno', 'quno')
+    await waitFor(() => { expect(row.getAttribute('aria-current')).toBe('page') })
+
+    // A stock 新会话 takes the main view: no preset match, so the row clears.
+    reference = await moveMainView(runtime, reference, 's-work', null)
+    await waitFor(() => { expect(row.getAttribute('aria-current')).toBeNull() })
+
+    // Switching back restores the row from the projection alone, never history.
+    await moveMainView(runtime, reference, 's-quno', 'quno')
+    await waitFor(() => { expect(row.getAttribute('aria-current')).toBe('page') })
+  })
+
+  it('waits for a pending projection instead of guessing, then follows it', async () => {
+    const { runtime, view } = await bench()
+    await mountOwned(runtime)
+    const row = await view.findByRole('button', { name: 'Quno' })
+
+    await runtime.sessions.add({ id: 's-pending' })
+    await act(async () => {
+      runtime.sessions.retainFor(runtime.ctx, 's-pending' as never, { source: 'mainView' })
+      await Promise.resolve()
+    })
+    expect(row.getAttribute('aria-current')).toBeNull()
+
+    await runtime.sessions.setProjection('s-pending', 'agentPreset', 'quno')
+    await waitFor(() => { expect(row.getAttribute('aria-current')).toBe('page') })
+
+    await runtime.sessions.setProjection('s-pending', 'agentPreset', null)
+    await waitFor(() => { expect(row.getAttribute('aria-current')).toBeNull() })
+  })
+
+  it('lets the first row in display order own a duplicated preset claim', async () => {
+    const { runtime, view } = await bench()
+    await mountOwned(runtime, { order: 10, label: 'Quno first' })
+    await mountOwned(runtime, { id: QUNO_CLAIM, order: 20, label: 'Quno second' })
+    await openMainView(runtime, 's-quno', 'quno')
+    const first = await view.findByRole('button', { name: 'Quno first' })
+    const second = view.getByRole('button', { name: 'Quno second' })
+    await waitFor(() => { expect(first.getAttribute('aria-current')).toBe('page') })
+    expect(second.getAttribute('aria-current')).toBeNull()
+    expect(within(second).getByTestId(`${QUNO_CLAIM}-icon`).getAttribute('data-active')).toBe('false')
+  })
+
+  it('drops the conversation highlight when its own row is disposed', async () => {
+    const { runtime, locale, view } = await bench()
+    await mountPanels(runtime, locale)
+    const owned = await mountOwned(runtime)
+    await openMainView(runtime, 's-quno', 'quno')
+    const row = view.getByRole('button', { name: 'Quno' })
+    await waitFor(() => { expect(row.getAttribute('aria-current')).toBe('page') })
+
+    await owned.dispose()
+    await waitFor(() => { expect(view.queryByRole('button', { name: 'Quno' })).toBeNull() })
+    // The plain rows never inherit a conversation claim.
+    expect(view.getByRole('button', { name: 'Alpha panel' }).getAttribute('aria-current')).toBeNull()
+    expect(view.getByRole('button', { name: 'Beta panel' }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it('keeps the ordinary panel click on a conversation-owned row', async () => {
+    const { runtime, layout, view } = await bench()
+    await mountOwned(runtime)
+    await openMainView(runtime, 's-quno', 'quno')
+    const row = await view.findByRole('button', { name: 'Quno' })
+    await waitFor(() => { expect(row.getAttribute('aria-current')).toBe('page') })
+    fireEvent.click(row)
+    expect(layout.selectPanel).toHaveBeenLastCalledWith(QUNO)
+    expect(runtime.panelInfo.getSnapshot()).toEqual({ activePanelId: QUNO })
   })
 })

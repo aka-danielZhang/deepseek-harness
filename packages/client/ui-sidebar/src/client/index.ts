@@ -50,12 +50,21 @@ export function apply(ctx: ClientContext): void {
     const next = ctx.slots.entriesOfSlot('sidebar.panellist').map(({ options }) => {
       // The list registration requires an id; StoredEntry erases the slot kind.
       const id = options.id as MainPanelId
-      return { id, order: options.order ?? 0, label: resolveSlotLabel(options.label) ?? id }
+      // Slot-declared option (SidebarPanelOptions); opaque to the core, so the
+      // bag hands it back untyped and an absent or malformed value stays out.
+      const preset = options.conversationAgentPreset
+      return {
+        id,
+        order: options.order ?? 0,
+        label: resolveSlotLabel(options.label) ?? id,
+        ...(typeof preset === 'string' && preset !== '' ? { conversationAgentPreset: preset } : {}),
+      }
     }).sort((a, b) => a.order - b.order)
     const previous = panels.getSnapshot()
     if (previous.length === next.length && previous.every((panel, index) => {
       const candidate = next[index] as SidebarPanelMetadata
       return panel.id === candidate.id && panel.order === candidate.order && panel.label === candidate.label
+        && panel.conversationAgentPreset === candidate.conversationAgentPreset
     })) return
     panels.set(next)
   }

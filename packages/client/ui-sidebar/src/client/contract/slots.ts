@@ -38,8 +38,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     /**
      * Global panel icons. Each list id addresses the matching main panel;
      * the sidebar owns the button and resolves its label from list metadata.
+     * A row may additionally stand for one Conversation through
+     * {@link SidebarPanelOptions.conversationAgentPreset}.
      */
-    'sidebar.panellist': { kind: 'list'; scope: 'root'; owner: SidebarPanelIconOwnerProps }
+    'sidebar.panellist': {
+      kind: 'list'; scope: 'root'; owner: SidebarPanelIconOwnerProps; options: SidebarPanelOptions
+    }
     /**
      * The workspace/session browsing region: section header, search, the
      * grouped/flat session list, and every workspace dialog. Declared by this
@@ -77,8 +81,21 @@ export interface SidebarBrandNameOwnerProps {
 export interface SidebarPanelIconOwnerProps {
   /** Requested square edge in pixels. */
   size: number
-  /** Whether this panel is selected in the main column. */
+  /** Whether this row is selected — its panel is active, or it stands for the on-screen Conversation. */
   active: boolean
+}
+
+/** Extra `sidebar.panellist` registration options beyond the list id/order/label. */
+export interface SidebarPanelOptions {
+  /**
+   * The Conversation this row stands for. While the main column shows a
+   * Conversation, the row reads as selected once the on-screen (mainView)
+   * Session's `agentPreset` projection resolves to this value — the row keeps
+   * its selected state after a hand-off leaves the panel. Absent: the row is
+   * selected only while its own panel is the active main panel. When several
+   * rows claim one preset, the first in display order owns it.
+   */
+  conversationAgentPreset?: string
 }
 
 /** Serializable metadata for one active global panel list registration. */
@@ -89,6 +106,8 @@ export interface SidebarPanelMetadata {
   order: number
   /** Row title and accessible name: resolved label, or the id when omitted. */
   label: string
+  /** Conversation preset this row stands for (see {@link SidebarPanelOptions}). */
+  conversationAgentPreset?: string
 }
 
 /**
