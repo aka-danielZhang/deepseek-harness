@@ -137,7 +137,19 @@ export interface SlotEntryDef {
    * face; child registrants do not own or replace this common capability.
    */
   inject?: object
+  /**
+   * Optional extra registration options this slot accepts beyond the core's
+   * kind fields. A registrant passes them in its register() options; the core
+   * carries them verbatim into {@link StoredEntry.options} so the owning entry
+   * can project them into its own metadata. The core never interprets them,
+   * and a slot that declares none keeps the historical option shape.
+   */
+  options?: object
 }
+
+/** Extra registration options one slot declares through {@link SlotEntryDef.options}. */
+type DeclaredOptions<K extends keyof SlotMap & string> =
+  SlotMap[K] extends { options: infer O extends object } ? O : object
 
 /** One caller-selected Component position inside a reusable Factory. */
 export interface FactoryLocalSlotDef {
@@ -763,13 +775,14 @@ export type SlotLabel = string | (() => string)
 
 /**
  * Kind shape fields carried in register options (keyed dispatch key; list
- * id/order/label; chain select/priority; non-chain priority = cell shadowing rank).
+ * id/order/label; chain select/priority; non-chain priority = cell shadowing rank),
+ * plus every extra option the slot declares ({@link SlotEntryDef.options}).
  */
 export type KindOptions<
   K extends keyof SlotMap & string,
   EntryKey extends EntryKeyOf<K>,
   M = never,
-> =
+> = (
   SlotMap[K]['kind'] extends 'keyed' ? {
     key: EntryKey
     /** Cell shadowing rank (ascending, default 0, lowest renders; same key + same priority throws — see {@link SlotCore.register}). */
@@ -795,6 +808,7 @@ export type KindOptions<
            */
           priority?: number
         }
+) & DeclaredOptions<K>
 
 /**
  * Compile-time presence check: an entry declaring children MUST consume
@@ -844,7 +858,7 @@ type BaseOptions<
  */
 export interface StoredEntry {
   component: unknown
-  options: { key?: string; id?: string; order?: number; label?: SlotLabel; priority?: number }
+  options: SlotEntryOptions
   /** Chain routing selector (type-erased like `inject`; present exactly on chain-slot entries). */
   select?: ((owner: never) => unknown) | undefined
   /** Registrant business face; positional params derive from the declaration (sessionId?, actions?). */
@@ -857,6 +871,26 @@ export interface StoredEntry {
   locale?: string | undefined
   /** Diagnostics label of who registered. */
   registrant?: string | undefined
+}
+
+/**
+ * Registration options as carried on a stored entry: the core's kind fields
+ * plus every extra option the slot declared through
+ * {@link SlotEntryDef.options}, addressed by name and opaque to the core.
+ */
+export interface SlotEntryOptions {
+  /** Keyed-slot cell key. */
+  key?: string
+  /** List-slot cell id. */
+  id?: string
+  /** List-slot display order. */
+  order?: number
+  /** List-slot display label (string or per-read thunk). */
+  label?: SlotLabel
+  /** Cell shadowing rank. */
+  priority?: number
+  /** Slot-declared extras, copied from the registration options verbatim. */
+  [option: string]: unknown
 }
 
 /**
@@ -893,6 +927,28 @@ interface ErasedOptions {
    * against the per-declaration InjectParams tuples. */
   inject?: ((...args: any) => Record<string, unknown>) | undefined
   registrant?: string | undefined
+}
+
+/** Registration members the core consumes itself; never part of the stored options bag. */
+const NON_OPTION_MEMBERS: ReadonlySet<string> = new Set([
+  'name', 'select', 'inject', 'children', 'store', 'locale', 'registrant',
+])
+
+/**
+ * The options bag as stored on the entry: the registrant's own option members
+ * (the core's kind fields plus any the slot declares through
+ * {@link SlotEntryDef.options}), leaving out the members the core keeps
+ * elsewhere and values the caller left absent.
+ * @param options - one registration's options object.
+ * @returns the bag carried on the stored entry.
+ */
+function storedOptions(options: ErasedOptions): SlotEntryOptions {
+  const bag: SlotEntryOptions = {}
+  for (const [member, value] of Object.entries(options) as [string, unknown][]) {
+    if (value === undefined || NON_OPTION_MEMBERS.has(member)) continue
+    bag[member] = value
+  }
+  return bag
 }
 
 /**
@@ -1264,13 +1320,7 @@ export class SlotCore {
 
     const entry: StoredEntry = {
       component,
-      options: {
-        ...(options.key !== undefined ? { key: options.key } : {}),
-        ...(options.id !== undefined ? { id: options.id } : {}),
-        ...(options.order !== undefined ? { order: options.order } : {}),
-        ...(options.label !== undefined ? { label: options.label } : {}),
-        ...(options.priority !== undefined ? { priority: options.priority } : {}),
-      },
+      options: storedOptions(options),
       ...(options.select !== undefined ? { select: options.select } : {}),
       ...(options.inject !== undefined ? { inject: options.inject } : {}),
       ...(options.children !== undefined ? { children: options.children } : {}),

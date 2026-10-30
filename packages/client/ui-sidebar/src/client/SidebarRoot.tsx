@@ -11,6 +11,14 @@
  * and the foot holds `sidebar.settings` plus `sidebar.footer.action`; the shell
  * hands them the wide flag (plus an expand request callback for the browser).
  *
+ * Row selection has two sources, resolved here and nowhere else: the active
+ * main panel (a row matching `activePanelId`) and, while the main column shows
+ * a Conversation, the row whose declared `conversationAgentPreset` equals the
+ * on-screen Session's projection. The second source exists because a panel
+ * entry may hand the layout back to the Conversation it opened — the click
+ * selects the panel, the hand-off clears `activePanelId`, and the row must
+ * keep reading as the entry to where the user now is.
+ *
  * The column also owns whether the scroll regions nested in it draw a
  * scrollbar at all: the shell tracks the pointer and rebinds ui-theme's
  * scrollbar indirection away while it is elsewhere, so a list the user is not
@@ -22,6 +30,7 @@ import {
   FishLogo, IconNewChatOutlineMedium, IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, isDarwinDesktop, ShortcutKeys, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {
   SidebarPanelMetadata, SidebarRootComponentProps, SidebarRootInjected, SidebarSectionOwnerProps,
 } from './contract/slots.ts'
@@ -50,14 +59,35 @@ function localBuildVersion(): string | undefined {
 
 type PanelRowProps =
   Pick<SidebarPanelMetadata, 'id' | 'label'>
+  & { readonly conversationAgentPreset: string | undefined }
   & Pick<SidebarSectionOwnerProps, 'wide'>
-  & Pick<PropsRuntime<'sidebar'>, 'usePanelInfo'>
+  & Pick<PropsRuntime<'sidebar'>, 'usePanelInfo' | 'useSessions'>
   & Pick<InjectFace<SidebarRootInjected>, 'selectPanel'>
   & PropsRenderSlots<'sidebar.panellist'>
 
 /** Each panel row subscribes only to its own selection state. */
-function PanelRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot }: PanelRowProps) {
-  const active = usePanelInfo(info => info.activePanelId === id)
+function PanelRow({
+  id, label, conversationAgentPreset, wide, usePanelInfo, useSessions, selectPanel, renderSlot,
+}: PanelRowProps) {
+  const activePanelId = usePanelInfo(info => info.activePanelId)
+  // The on-screen (mainView) Conversation and its resolved preset, as a
+  // primitive so the selector stays snapshot-stable. A pending projection
+  // reads as absent: the row waits for the Session's values instead of
+  // guessing, and a Conversation of any other preset clears the row.
+  const conversationPreset = useSessions((state) => {
+    for (const row of Object.values(state.byId)) {
+      if ((row.retainedBy.mainView ?? 0) > 0) {
+        const value = row.projectionValues?.agentPreset
+        return typeof value === 'string' ? value : undefined
+      }
+    }
+    return undefined
+  })
+  // A global panel always outranks a Conversation claim: a Session merely kept
+  // in the background never highlights its row over the panel on screen.
+  const active = activePanelId !== null
+    ? activePanelId === id
+    : conversationAgentPreset !== undefined && conversationPreset === conversationAgentPreset
   return (
     <Tooltip label={label} delayMs={500} disabled={wide}>
       <button
@@ -94,10 +124,22 @@ export function SidebarRoot({
   usePanels,
   useShortcuts,
   usePanelInfo,
+  useSessions,
   t,
   renderSlot,
 }: SidebarRootComponentProps) {
   const panels = usePanels(snapshot => snapshot)
+  // Rows may claim a Conversation preset; the first row in display order owns
+  // each claim, so a duplicated declaration never raises two selected rows.
+  // Deterministic resolution, the same rule the browsing region applies to a
+  // duplicated alternate seat — a composition mistake, not a thrown error.
+  const presetOwners = new Set<MainPanelId>()
+  const claimedPresets = new Set<string>()
+  for (const panel of panels) {
+    if (panel.conversationAgentPreset === undefined || claimedPresets.has(panel.conversationAgentPreset)) continue
+    claimedPresets.add(panel.conversationAgentPreset)
+    presetOwners.add(panel.id)
+  }
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
   const newShortcut = useShortcuts(rows => rows.find(row => row.id === 'session.new'))
   const toggleLabel = collapsed ? t('toggle.open') : t('toggle.collapse')
@@ -287,13 +329,15 @@ export function SidebarRoot({
 
       {panels.length > 0 && (
         <nav className={css.panelList} aria-label={t('panels.label')}>
-          {panels.map(({ id, label }) => (
+          {panels.map(({ id, label, conversationAgentPreset }) => (
             <PanelRow
               key={id}
               id={id}
               label={label}
+              conversationAgentPreset={presetOwners.has(id) ? conversationAgentPreset : undefined}
               wide={wide}
               usePanelInfo={usePanelInfo}
+              useSessions={useSessions}
               selectPanel={selectPanel}
               renderSlot={renderSlot}
             />

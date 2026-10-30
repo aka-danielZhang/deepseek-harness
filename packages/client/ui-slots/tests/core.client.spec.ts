@@ -12,6 +12,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'test.keyed': { kind: 'keyed'; scope: 'session' }
     'test.chain': { kind: 'chain'; scope: 'session'; owner: { tags: string[] } }
     'test.grandchild': { kind: 'single'; scope: 'root' }
+    // A slot that declares extra registration options (SlotEntryDef.options).
+    'test.declaring': { kind: 'list'; scope: 'root'; options: { badge?: string } }
   }
 }
 
@@ -166,6 +168,25 @@ describe('kind semantics', () => {
     // @ts-expect-error list registration requires options.id
     expect(() => core.register({ name: 'test.list' }, Comp)).toThrow('requires options.id')
     expect(core.entries('test.list').map(e => e.options.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('carries slot-declared extra options into the stored bag, leaving core members out', () => {
+    const core = new SlotCore()
+    core.register({
+      name: 'root',
+      children: { 'test.declaring': { kind: 'list', scope: 'root' } },
+    // Erased like mountFrame: RendersCheck would demand a renderSlot consumer.
+    }, Comp as never)
+    const inject = () => ({})
+    core.register({
+      name: 'test.declaring', id: 'row', order: 30, badge: 'quno', label: 'Row', inject,
+    }, Comp as never)
+    const entry = core.entries('test.declaring')[0]!
+    // The core's own members sit beside the declared extra, one bag.
+    expect(entry.options).toEqual({ id: 'row', order: 30, label: 'Row', badge: 'quno' })
+    // The members the core reads elsewhere never enter the bag.
+    expect(entry.inject).toBe(inject)
+    expect(Object.keys(entry.options)).not.toContain('inject')
   })
 
   it('chain: missing select throws; select and priority land on the stored entry', () => {
