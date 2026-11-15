@@ -213,7 +213,10 @@ export class AgentPresetSeatController {
     if (session === undefined) return
     // A started session's history was produced under its own composition; the
     // host refuses the swap, so the stage is no longer meaningful.
-    if (!session.blank || presetOf(session) === staged) {
+    // A session created with an explicit preset (Quno's durable main
+    // conversation, say) records `agentPreset` while still blank: the staged
+    // default must not overwrite that creation choice on first open.
+    if (!session.blank || presetOf(session) !== undefined) {
       this.clearStage()
       return
     }
