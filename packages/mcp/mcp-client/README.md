@@ -89,32 +89,6 @@ When the model calls an MCP tool, the call runs against the remote server with a
 
 Images are supported when the current model accepts image input and the harness attachment feature is enabled; they then appear in the conversation like other images. Otherwise — and for audio or embedded resources — the model sees a clear diagnostic message instead of nothing.
 
-## Events
-
-| Event | Mode | Payload |
-|---|---|---|
-| `mcp-client/status` | emit | `serverName`, `status: 'connecting' \| 'connected' \| 'reconnecting' \| 'failed' \| 'disposed'`, `toolCount` |
-
-Published at each supervisor commit point: attempt start (`connecting`), connect + initial sync settled (`connected`), backoff armed (`reconnecting`), give-up / reconnect-disabled loss / failed generation that never closed (`failed`), and disposal (`disposed`). A completed tool sync also republishes the current status because `toolCount` changes without a status transition — including a second `failed`/`disposed` carrying `toolCount: 0` once the queued unregistration runs. The emitting fiber's context and every ancestor observe the event through the shared Cordis event bus; `serverName` disambiguates concurrent instances. Listener failures are contained and logged by the emitter, so an observer defect cannot disrupt the supervisor. The fiber lifecycle alone cannot stand in for this event: with `failOnStartupError: false` a failing server still reaches an `active` fiber inside its reconnect loop.
-
-### Startup, updates, and reconnection
-
-The server's tools appear before the harness starts its first turn. Set `startupTimeoutMs` to bound each connection attempt, including template resolution and initial tool discovery; an omitted value adds no whole-attempt deadline. Tool-list notifications refresh the registered tools; discovery failures preserve the previous set, while registration conflicts close the connection and apply the reconnect policy.
-
-When a server connection drops — for example a local server process crashes — the plugin reconnects automatically with delays that double from 500 ms up to 30 s and then refreshes the tool set; reconnect progress is visible in the logs. During an outage the last known tools stay listed but calls to them fail until the server recovers. After ten consecutive failed attempts the server's tools are removed and reconnection stops until you reload the configuration or restart the harness; a server that stays connected for a while resets that counter. Set `reconnect.enabled: false` to disable automatic reconnection — tools then stay listed but fail until you reload. Editing the configuration entry reloads the server connection in place, and unchanged names stay unchanged.
-
-<a id="runtime-templates-and-credentials"></a>
-### Runtime templates and credentials
-
-With `expandTemplates: true`, `command`, `args`, `env` values, `cwd`, `url`, and `headers` values accept `${credential:REF}`. The current credentials provider resolves each reference; the [local provider](../../credentials/credentials-local/README.md) also reads the Host's inherited environment. Raw plugin configuration retains its template strings. A credential reference requires a credentials provider at load. Missing values enter `waiting-credentials` without consuming reconnect attempts unless strict startup rejects activation; a referenced credential update retries resolution.
-
-Credential notifications rebuild the connection only when the resolved values change; same-value notifications preserve the connection and its reconnect budget. The old connection must close and finish local cleanup before a replacement starts. Incomplete cleanup blocks replacement until the Host restarts.
-
-With template expansion enabled, failure diagnostics, tool-call failures, and MCP `isError` tool-result text keep upstream messages but replace every value the instance resolved, including earlier rotations and URL-encoded forms, with `[redacted]`. Successful tool results retain their content.
-
------
-
-<a id="understand-the-implementation"></a>
 ## Understand the implementation
 
 <details>
