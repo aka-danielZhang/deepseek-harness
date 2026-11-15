@@ -2988,6 +2988,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the accepted title and durable event sequence.',
       },
       {
+        signature: '@Remote(\'setInteractionMode\') setInteractionMode(request: SessionSetInteractionModeRequest): Promise<SessionSetInteractionModeValue>',
+        description: 'Declare how the client is currently viewing one Session. An `inspect` declaration makes the Host refuse user prompt admission for the Session until an `interactive` declaration replaces it; the state is volatile and dies with the Host process.',
+        parameters: [{ name: 'request', description: 'Session identity and declared viewing posture.' }],
+        returns: 'the mode now in force for the Session.',
+      },
+      {
         signature: '@Remote(\'fork\') async fork(request: SessionForkRequest): Promise<SessionForkValue>',
         description: 'Fork one cold-readable exact event prefix into a new Session. An omitted boundary selects the latest completed-turn prefix; an open cut receives synthetic fork closers.',
         parameters: [{ name: 'request', description: 'source Session, optional exact inclusive event boundary, and migration preflight choice.' }],
@@ -9021,6 +9027,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionInspection extends SessionStorageMetadata {\n    readonly events: readonly SessionEvent[];\n}',
   },
   {
+    name: 'SessionInteractionMode',
+    declaration: 'export type SessionInteractionMode = \'interactive\' | \'inspect\';',
+  },
+  {
     name: 'SessionLineageNode',
     declaration: 'export interface SessionLineageNode {\n    session: SessionRecord;\n    descendants: SessionLineageNode[];\n}',
   },
@@ -9291,6 +9301,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionSeqCursor',
     declaration: 'export type SessionSeqCursor = SessionSeq | -1;',
+  },
+  {
+    name: 'SessionSetInteractionModeRequest',
+    declaration: 'export interface SessionSetInteractionModeRequest {\n    readonly sessionId: SessionId;\n    readonly mode: SessionInteractionMode;\n}',
+  },
+  {
+    name: 'SessionSetInteractionModeValue',
+    declaration: 'export interface SessionSetInteractionModeValue {\n    readonly sessionId: SessionId;\n    readonly mode: SessionInteractionMode;\n}',
   },
   {
     name: 'SessionStartInput',

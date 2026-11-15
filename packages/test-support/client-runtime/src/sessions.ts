@@ -5,11 +5,12 @@ import {
   createScope, MutableSessionEventSource, scopeOf, SESSION_SEARCH_RESULT_LIMIT,
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
-  AgentContext, ISessions, ProjectionsFace, SessionBinding, SessionFace, SessionListState,
+  AgentContext, ISessions, ProjectionsFace, SessionBinding, SessionFace, SessionInteractionMode, SessionListState,
   SessionEventLikeEntry, SessionLiveEventEntry, SessionSearchResultItem,
   SessionReference, SessionReferenceSource, SessionRetainInfo, SessionRetainOptions,
-  SessionSnapshot, SessionSummary, SessionTarget, SubmissionHandle,
+  SessionSetInteractionModeValue, SessionSnapshot, SessionSummary, SessionTarget, SubmissionHandle,
 } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import { scopeIdentityOf } from '@deepseek-ai/dsh-api-session-controller/src/client/scope.ts'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'
@@ -319,7 +320,7 @@ export class TestSessions implements ISessions {
 
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
-    method: 'create' | 'refreshProjections' | 'refresh' | 'search' | 'fork'
+    method: 'create' | 'refreshProjections' | 'refresh' | 'search' | 'fork' | 'setInteractionMode'
     args: unknown[]
   }[] = []
 
@@ -657,6 +658,12 @@ export class TestSessions implements ISessions {
   refreshProjections(sessionId: SessionId): Promise<void> {
     this.calls.push({ method: 'refreshProjections', args: [sessionId] })
     return Promise.resolve()
+  }
+
+  /** Record a viewing-mode declaration; fixture callers assert the recorded call. */
+  setInteractionMode(sessionId: SessionId, mode: SessionInteractionMode): Promise<RemoteResult<SessionSetInteractionModeValue>> {
+    this.calls.push({ method: 'setInteractionMode', args: [sessionId, mode] })
+    return Promise.resolve({ ok: true, value: { sessionId, mode } })
   }
 
   /** Record a list refresh; fixture callers publish list state explicitly. */

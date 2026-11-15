@@ -235,13 +235,23 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     }
     /** Resident navigation container, including when no Session is selected. */
     'conversation.header': { kind: 'single'; scope: 'session-maybe' }
-    /** Strict per-Session title, actions, and View navigation. */
+    /**
+     * Selector-routed replacements for the strict per-Session title, actions,
+     * and View navigation. Entries try in ascending priority (lower first);
+     * the first non-null selector elects its component and a declined election
+     * falls to the next entry. The shipped stock header registers with an
+     * always-claiming selector, so an entry that claims only its own Sessions
+     * replaces the whole header there and keeps the stock chrome everywhere
+     * else — the occupant never renders stock components itself.
+     */
     'conversation.session.header': {
-      kind: 'single'
+      kind: 'chain'
       scope: 'session'
       owner: {
         /** Parent-owned visibility shared with the header container styling. */
         hideChrome: boolean
+        /** The rendered Session; the selector's claim input. */
+        sessionId: SessionId
       }
     }
     /** Optional replacement for one Session breadcrumb title; overlays must portal because the title area clips overflow. */

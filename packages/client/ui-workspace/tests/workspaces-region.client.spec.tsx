@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { act, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
-import { SlotTestRuntime } from '@deepseek-ai/dsh-client-test-runtime'
+import { contextMenuHook, SlotTestRuntime } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
@@ -35,14 +35,35 @@ async function createRuntime(): Promise<SlotTestRuntime> {
 
 type FrameProps = PropsRenderSlots<'sidebar.workspaces'>
 function RegionFrame({ renderSlot }: FrameProps) {
-  return renderSlot('sidebar.workspaces', { wide: true, expandSidebar: () => {} })
+  return renderSlot('sidebar.workspaces', { wide: true, expandSidebar: () => {} }, {
+    hookContext: { useSectionScroller: () => ({ bindScrollerRef: () => {} }) },
+  })
 }
 
 async function mountRegion(): Promise<SlotTestRuntime> {
   const runtime = await createRuntime()
   onTestFinished(() => runtime.ctx.fiber.dispose())
+  // The workspace apply() registers built-in Session menu actions through the
+  // context-menu registry; the region specs never open one, so a stub suffices.
+  runtime.ctx.provide('contextMenus', {
+    open: vi.fn(),
+    register: vi.fn(),
+    // The browser binds this source through the standard hook machinery; an
+    // always-null observable keeps the binding live with no menu on screen.
+    active: createSnapshotStore<unknown>(null),
+  } as never)
+  // Row context menus ride the global standard props; the ui-context-menu
+  // plugin is not mounted here, so supply the production-shaped hook directly.
+  runtime.slots.provideRoot({ props: { useContextMenu: contextMenuHook() } })
   await runtime.root.declare(
-    { 'sidebar.workspaces': { kind: 'single', scope: 'root' } } as never,
+    {
+      // The shell declares the section-scroller factory in production; the
+      // region specs mirror it so the browser receives useSectionScroller.
+      'sidebar.workspaces': {
+        kind: 'single', scope: 'root',
+        inject: { hooks: { sectionScroller: (_standard: unknown, hooks: { useSectionScroller: unknown }) => hooks.useSectionScroller } },
+      },
+    } as never,
     RegionFrame as never,
   )
   await runtime.mount({ inject: [...inject], apply })

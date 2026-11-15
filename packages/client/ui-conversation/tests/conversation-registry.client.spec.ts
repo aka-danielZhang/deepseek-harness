@@ -98,6 +98,7 @@ function fakeSessions(ctx: Context): { sessions: ISessions; binding: SessionBind
     retainInfo: () => createSnapshotStore({ referenceCount: 1, retainedBy: {} }),
     subagentAddress: () => undefined,
     refreshProjections: () => Promise.reject(new Error('unused fake Sessions operation')),
+    setInteractionMode: () => Promise.reject(new Error('unused fake Sessions operation')),
     refresh: () => Promise.reject(new Error('unused fake Sessions operation')),
     search: () => Promise.reject(new Error('unused fake Sessions operation')),
     fork: () => Promise.reject(new Error('unused fake Sessions operation')),

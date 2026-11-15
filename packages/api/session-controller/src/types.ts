@@ -207,6 +207,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'session/title-invalid': { readonly sessionId: SessionId }
     'session/fork-unavailable': { readonly sessionId: SessionId }
     'session/migration-required': { readonly sessionId: SessionId }
+    'session/read-only': { readonly sessionId: SessionId }
     'subagent/not-found': {
       readonly parentSessionId: SessionId
       readonly childSessionId: SessionId
@@ -304,6 +305,29 @@ export interface SessionRenameRequest {
 export interface SessionRenameValue {
   readonly title: string
   readonly seq: number
+}
+
+/**
+ * How the client is currently viewing one Session. `interactive` is the
+ * ordinary posture; `inspect` is a read-only check view — the Host refuses
+ * user prompt admission for the Session while it lasts, before any durable
+ * write. Program-side inputs (worker output, tool results, flush) never pass
+ * through the gated prompt path and stay unaffected.
+ */
+export type SessionInteractionMode = 'interactive' | 'inspect'
+
+/** Declare how the client is viewing one Session. */
+export interface SessionSetInteractionModeRequest {
+  readonly sessionId: SessionId
+  /** The declared viewing posture; `interactive` clears a previous `inspect`. */
+  readonly mode: SessionInteractionMode
+}
+
+/** Acknowledgement of one viewing-mode declaration. */
+export interface SessionSetInteractionModeValue {
+  readonly sessionId: SessionId
+  /** The mode now in force for the Session. */
+  readonly mode: SessionInteractionMode
 }
 
 /** Session fork request. */

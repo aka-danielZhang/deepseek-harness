@@ -141,6 +141,7 @@ class FakeSessions implements ISessions {
   readonly fork = vi.fn<ISessions['fork']>(async () => sid('forked'))
   readonly retained: RetainedSession[] = []
   readonly refreshProjections = vi.fn<ISessions['refreshProjections']>(() => Promise.resolve())
+  readonly setInteractionMode = vi.fn<ISessions['setInteractionMode']>(() => Promise.resolve({ ok: true, value: { sessionId: sid('x'), mode: 'interactive' } }))
   readonly retain = vi.fn<ISessions['retain']>((target) => {
     const release = vi.fn<() => void>()
     const sessionId = typeof target === 'string' ? target : target.childSessionId

@@ -10,8 +10,10 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { AgentContext } from '../scope.ts'
+import type { SessionInteractionMode, SessionSetInteractionModeValue } from '../../types.ts'
 import type { SessionSearchResultItem } from '../sessions/manager.ts'
 import type { SessionBinding, SessionListState } from '../sessions/service.ts'
+export type { SessionInteractionMode, SessionSetInteractionModeValue }
 import type { SessionFace } from './session.ts'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionReferenceSource } from '../index.ts'
@@ -104,6 +106,17 @@ export interface ISessions {
    * @returns completion of the current or newly started refresh.
    */
   refreshProjections(sessionId: SessionId): Promise<void>
+
+  /**
+   * Declare how the client is currently viewing one Session. An `inspect`
+   * declaration makes the Host refuse user prompt admission until an
+   * `interactive` declaration replaces it; the declaration is volatile and
+   * dies with the Host process.
+   * @param sessionId - Session the declaration addresses.
+   * @param mode - declared viewing posture.
+   * @returns the mode now in force, or the Remote failure.
+   */
+  setInteractionMode(sessionId: SessionId, mode: SessionInteractionMode): Promise<RemoteResult<SessionSetInteractionModeValue>>
 
   /**
    * Refresh the Host-authoritative Session list.

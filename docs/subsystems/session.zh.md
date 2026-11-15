@@ -971,6 +971,16 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
 @Remote('rename') rename(request: SessionRenameRequest): Promise<SessionRenameValue>
 
 /**
+ * Declare how the client is currently viewing one Session. An `inspect`
+ * declaration makes the Host refuse user prompt admission for the Session
+ * until an `interactive` declaration replaces it; the state is volatile and
+ * dies with the Host process.
+ * @param request - Session identity and declared viewing posture.
+ * @returns the mode now in force for the Session.
+ */
+@Remote('setInteractionMode') setInteractionMode(request: SessionSetInteractionModeRequest): Promise<SessionSetInteractionModeValue>
+
+/**
  * Fork one cold-readable exact event prefix into a new Session. An omitted
  * boundary selects the latest completed-turn prefix; an open cut receives
  * synthetic fork closers.

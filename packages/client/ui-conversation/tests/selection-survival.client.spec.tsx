@@ -16,10 +16,10 @@ async function createBench() {
   const conversation = createConversationStore()
   await runtime.root.declare({
     'conversation.session': { kind: 'single', scope: 'session' },
-    'conversation.session.header': { kind: 'single', scope: 'session' },
+    'conversation.session.header': { kind: 'chain', scope: 'session' },
   }, (_props: PropsRenderSlots<'conversation.session' | 'conversation.session.header'>) => null)
   runtime.slots.register({ name: 'conversation.session', store: conversation }, () => null)
-  runtime.slots.register({ name: 'conversation.session.header', store: conversation }, () => null)
+  runtime.slots.register({ name: 'conversation.session.header', select: () => true, store: conversation }, () => null)
   runtime.renderRoot()
   return { runtime }
 }

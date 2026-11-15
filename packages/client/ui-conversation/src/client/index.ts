@@ -37,6 +37,7 @@ export type {
 } from './contract/groups.ts'
 export { ConversationController, UnsupportedImageMediaTypeError } from './service.ts'
 export type { IConversation } from './service.ts'
+export type { ConversationQueueVisibility } from './queue/QueueDock.tsx'
 export type {
   ConversationContextReader, ConversationLocation,
   ConversationLocationData, ConversationLocationDataScope, ConversationLocationDataSource,

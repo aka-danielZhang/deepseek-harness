@@ -7,8 +7,10 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type {
   SessionControlBaseline,
   SessionControlFrame,
+  SessionInteractionMode,
   SessionProjectionHints,
   SessionRenameValue,
+  SessionSetInteractionModeValue,
   SessionSummary,
 } from '../../types.ts'
 import { mergeOrderedBaseline } from '../ordered-baseline.ts'
@@ -568,6 +570,18 @@ export class SessionManager {
       this.projectionStore(sessionId).apply('title', result.value.title, SessionSeq(result.value.seq))
     }
     return result
+  }
+
+  /**
+   * Declare how the client is currently viewing one Session. An `inspect`
+   * declaration makes the Host refuse user prompt admission until an
+   * `interactive` declaration replaces it.
+   * @param sessionId - Session the declaration addresses.
+   * @param mode - declared viewing posture.
+   * @returns the mode now in force, or the Remote failure.
+   */
+  setInteractionMode(sessionId: SessionId, mode: SessionInteractionMode): Promise<RemoteResult<SessionSetInteractionModeValue>> {
+    return this.remote.session.setInteractionMode({ sessionId, mode })
   }
 
   /**

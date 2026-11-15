@@ -182,6 +182,7 @@ export const SERVICE_PAGE: Record<string, string> = {
  */
 export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
   contextMenus: 'client-side interface-typed menu registry — packages/client/ui-context-menu/README.md owns the API',
+  conversationQueueVisibility: 'client-side optional per-Session queue-dock row visibility policy — packages/client/ui-conversation/README.md owns the API',
   fileActions: 'client-side interface-typed file actions — packages/client/ui-file-actions/README.md owns the API',
   invocation: 'not a service: per-call accessor (RemoteInvocation | undefined) the Gateway derives for each Remote call — packages/api/gateway/README.md owns the contract',
   webTerminals: 'client-side terminal view models — packages/api/terminal-controller/README.md owns the API',
@@ -564,6 +565,8 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   SessionSearchValue: 'session.md',
   SessionSelectModelRequest: 'session.md',
   SessionSelectModelValue: 'session.md',
+  SessionSetInteractionModeRequest: 'session.md',
+  SessionSetInteractionModeValue: 'session.md',
   SessionSummary: 'session.md',
   SessionMessageProjection: 'session.md',
   SessionUpdateQueueRequest: 'session.md',

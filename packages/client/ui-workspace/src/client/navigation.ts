@@ -7,6 +7,7 @@ import type {
   ISessions,
   SessionCreateError,
   SessionBinding,
+  SessionInteractionMode,
   SessionReference,
   SessionTarget,
   SessionListState,
@@ -37,6 +38,16 @@ export interface StartSessionOptions extends DraftInitializationOptions {
   readonly agentPreset?: string
 }
 
+/** Viewing posture for one openSession call. */
+export interface SessionViewOptions {
+  /**
+   * Declare the Host-side viewing posture for the opened Session: `inspect`
+   * refuses user prompt admission until the Session is opened `interactive`
+   * again. Omission keeps the Session interactive.
+   */
+  readonly interactionMode?: SessionInteractionMode
+}
+
 /** Workspace archive, directory, and browsing-view operations consumed by Client UI domains. */
 export interface UiWorkspace {
   /**
@@ -48,8 +59,11 @@ export interface UiWorkspace {
   /**
    * Select a Session and show its Conversation as one UI navigation action.
    * @param target - known Session identity or durable direct-parent subagent address to display.
+   * @param options - viewing posture for the opened Session: an `inspect`
+   * declaration makes the Host refuse user prompt admission until the Session
+   * is opened `interactive` again.
    */
-  openSession(target: SessionTarget): void
+  openSession(target: SessionTarget, options?: SessionViewOptions): void
   /**
    * Connect a Workspace and open its Session unless a later navigation supersedes it.
    * @param workspaceId - target Workspace.
@@ -306,8 +320,17 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     }
   }
 
-  openSession(target: SessionTarget): void {
+  openSession(target: SessionTarget, options: SessionViewOptions = {}): void {
     this.replaceMain(target, this.lifetime.signal, 'reveal')
+    const { interactionMode } = options
+    // The declaration rides behind the navigation: it is a viewing-posture
+    // hint, not a prerequisite, so a failed declare logs and leaves the Host
+    // default (interactive) in force instead of failing the open.
+    if (interactionMode !== undefined && typeof target === 'string') {
+      void this.sessions.setInteractionMode(target, interactionMode).then((result) => {
+        if (!result.ok) console.warn('interaction-mode declare failed:', result.error.code)
+      }, (reason: unknown) => { console.warn('interaction-mode declare failed:', reason) })
+    }
   }
 
   openWorkspace(

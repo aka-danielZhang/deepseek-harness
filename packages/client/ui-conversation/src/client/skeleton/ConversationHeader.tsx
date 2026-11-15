@@ -9,7 +9,7 @@ import css from './ConversationRoot.module.css'
  * @param props - Optional Session sources and authorized header slots.
  * @returns The persistent header with any selected Session's title and views.
  */
-export function ConversationHeader({ sessionId, useSession, useConversation, renderSlot }: ConversationHeaderProps) {
+export function ConversationHeader({ sessionId, useSession, useConversation, renderSlot, renderSlotChain }: ConversationHeaderProps) {
   const session = useSession(s => s)
   const conversation = useConversation(s => s)
   const blank = session === undefined || conversation === undefined
@@ -23,7 +23,7 @@ export function ConversationHeader({ sessionId, useSession, useConversation, ren
         // The empty title row keeps the blank-Session header height, so the
         // Hero centers its input card at the same offset before a Session exists.
         ? <div className={css.titleRow} />
-        : renderSlot('conversation.session.header', { hideChrome: blank })}
+        : renderSlotChain('conversation.session.header', { hideChrome: blank, sessionId })}
     </header>
   )
 }

@@ -690,7 +690,7 @@ describe('Web session model selection', () => {
     const { ctx, sessionId } = await harness()
     const memory = new Map<string, string>()
     const writes: [string, string, string | undefined][] = []
-    const remote = createSessionTestRemote(ctx, {
+    const remote = await createSessionTestRemote(ctx, {
       defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
       recallModelEffort: (provider, model) => memory.get(`${provider}/${model}`),
       rememberModelEffort: (provider, model, effort) => {
@@ -712,11 +712,12 @@ describe('Web session model selection', () => {
     })
     expect(writes).toEqual([])
 
-    // A bare pick with no memory falls back to the adapter default.
+    // A bare pick with no memory records the bare selection; the adapter
+    // default materializes at dispatch time (upstream 0.2.2 semantics).
     expect(expectValue(await remote.selectModel(request({
       sessionId, provider: 'deepseek-official', model: 'deepseek-chat',
     }))).selected).toEqual({
-      provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high',
+      provider: 'deepseek-official', model: 'deepseek-chat',
     })
     expect(writes).toEqual([])
 
@@ -739,7 +740,7 @@ describe('Web session model selection', () => {
   it('drops a remembered effort the model no longer offers and falls back to its default', async () => {
     const { ctx, sessionId } = await harness()
     const memory = new Map<string, string>([['deepseek-official/deepseek-reasoner', 'medium']])
-    const remote = createSessionTestRemote(ctx, {
+    const remote = await createSessionTestRemote(ctx, {
       defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
       recallModelEffort: (provider, model) => memory.get(`${provider}/${model}`),
       rememberModelEffort: (provider, model, effort) => {
@@ -753,7 +754,7 @@ describe('Web session model selection', () => {
     expect(expectValue(await remote.selectModel(request({
       sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner',
     }))).selected).toEqual({
-      provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'high',
+      provider: 'deepseek-official', model: 'deepseek-reasoner',
     })
     expect(memory.has('deepseek-official/deepseek-reasoner')).toBe(false)
     await ctx.fiber.dispose()

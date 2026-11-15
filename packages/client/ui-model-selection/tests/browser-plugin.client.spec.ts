@@ -325,7 +325,7 @@ describe('ui-model-selection dual entry', () => {
     b.mint('s1')
     b.setProjected(sid('s1'), {
       lastUsed: null,
-      next: { provider: 'deepseek-official', model: 'deepseek-v4-pro', reasoningEffort: 'max' },
+      next: { provider: 'deepseek-official', model: 'deepseek-v4-pro', reasoningEffort: ReasoningEffortId('max') },
     })
     const options = await b.popup().options(projection('s1'), new AbortController().signal)
     const pro = options.find((o: SelectOption) => o.label === 'DeepSeek-V4-Pro')!

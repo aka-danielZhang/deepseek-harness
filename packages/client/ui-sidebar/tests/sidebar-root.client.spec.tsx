@@ -38,11 +38,15 @@ const neverHook = (() => { throw new Error('shell must not read global hooks') }
 type AttentionSnapshot = Parameters<Parameters<SidebarRootComponentProps['useSessionStatus']>[0]>[0]
 const noAttention: AttentionSnapshot = new Map()
 const useSessionStatus: SidebarRootComponentProps['useSessionStatus'] = selector => selector(noAttention)
+// Panel rows read the catalog for Conversation-claim selection; the shell
+// specs mount no conversation-owned rows, so an empty catalog satisfies them.
+const noSessions = { ids: [], byId: {}, phase: 'ready', projectionsBySession: {} } as never
+const useSessions: SidebarRootComponentProps['useSessions'] = selector => selector(noSessions)
 
 function makeHeaderProps(): HeaderLeadingControlsProps {
   return {
     useContextMenu: contextMenuHook(),
-    useSessions: neverHook, useSessionStatus, useSessionRetainInfo: neverHook,
+    useSessions, useSessionStatus, useSessionRetainInfo: neverHook,
     usePanelInfo, useResource, useWorkspaces: neverHook, ...allowAllAccess,
     usePanels: selector => selector([]), useShortcuts: selector => selector([]),
     useEntryPins: selector => selector([]), useEntryActions: selector => selector(false),
@@ -76,7 +80,7 @@ function mountShell({ collapsed = false, width = 300, drawer = false, shortcuts 
     <SidebarRoot
       drawer={current.drawer}
       collapsed={current.collapsed} width={current.width}
-      useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
+      useSessions={useSessions} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector(panels)} useEntryPins={selector => selector([])}
       useEntryActions={selector => selector(false)} setPinned={vi.fn()}
       useShortcuts={selector => selector(shortcuts)}
@@ -196,7 +200,7 @@ describe('SidebarRoot shell', () => {
     cleanup()
     document.documentElement.dataset.platform = 'darwin'
     render(<HeaderLeadingControls toggleSidebar={vi.fn()} startSession={vi.fn()} selectPanel={vi.fn()} trackEntryClick={vi.fn()} t={t}
-      usePanelInfo={neverHook} useSessions={neverHook} useSessionStatus={neverHook}
+      usePanelInfo={neverHook} useSessions={useSessions} useSessionStatus={neverHook}
       useSessionRetainInfo={neverHook} useContextMenu={contextMenuHook()} useResource={useResource} useWorkspaces={neverHook}
       {...allowAllAccess}
       usePanels={select => select([])} useEntryPins={select => select([])}
@@ -241,7 +245,7 @@ describe('SidebarRoot shell', () => {
     const useRemoteAccess = vi.fn((action: string) => action !== 'session/create')
     render(<SidebarRoot
       collapsed={false} width={300} drawer={false}
-      useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
+      useSessions={useSessions} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
       useEntryActions={selector => selector(false)} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
@@ -274,7 +278,7 @@ describe('SidebarRoot shell', () => {
     const { container } = render(<SidebarRoot
       drawer={false}
       collapsed={false} width={300}
-      useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
+      useSessions={useSessions} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
       useEntryActions={selector => selector(false)} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
@@ -299,7 +303,7 @@ describe('SidebarRoot shell', () => {
     render(<SidebarRoot
       drawer={false}
       collapsed={false} width={300}
-      useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
+      useSessions={useSessions} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
       useEntryActions={selector => selector(false)} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
@@ -328,7 +332,7 @@ describe('SidebarRoot shell', () => {
     const trackEntryClick = vi.fn<SidebarRootComponentProps['trackEntryClick']>()
     render(<SidebarRoot
       collapsed={false} width={300} drawer={false}
-      useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
+      useSessions={useSessions} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
       useEntryActions={selector => selector(false)} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
@@ -380,7 +384,7 @@ describe('SidebarRoot shell', () => {
     render(<SidebarRoot
       drawer={false}
       collapsed={false} width={300}
-      useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
+      useSessions={useSessions} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
       useEntryActions={selector => selector(false)} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}
@@ -452,7 +456,7 @@ describe('SidebarRoot shell', () => {
     render(<SidebarRoot
       drawer={false}
       collapsed width={56}
-      useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
+      useSessions={useSessions} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useEntryPins={selector => selector([])}
       useEntryActions={selector => selector(false)} setPinned={vi.fn()}
       useShortcuts={selector => selector([])}

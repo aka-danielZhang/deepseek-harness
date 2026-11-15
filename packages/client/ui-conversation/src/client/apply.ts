@@ -435,12 +435,15 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     name: 'conversation.header',
     children: {
       'conversation.header.leading': { kind: 'single', scope: 'root' },
-      'conversation.session.header': { kind: 'single', scope: 'session' },
+      'conversation.session.header': { kind: 'chain', scope: 'session' },
     },
   }, ConversationHeader)
 
   const registerSessionHeader = () => slots.register({
     name: 'conversation.session.header',
+    // The stock header claims whenever the election reaches it: entries at a
+    // lower priority try first and decline for Sessions they do not own.
+    select: () => true,
     locale: NS,
     children: {
       'conversation.session.header.lineage': { kind: 'single', scope: 'session' },

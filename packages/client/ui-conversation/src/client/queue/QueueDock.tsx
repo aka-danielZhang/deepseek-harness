@@ -32,6 +32,33 @@ export interface QueueDockInjected {
   notify: (level: 'info' | 'error', text: string) => void
   /** Resolve one durable queued image into a session-scoped browser URL. */
   loadImage: (attachment: ImageAttachmentRef) => Promise<string>
+  /**
+   * Session-scoped dock-row visibility policy, or undefined without one.
+   * Present when the Session's scope provides the optional
+   * {@link ConversationQueueVisibility} service; the dock then renders only
+   * rows the policy admits, so a program-owned submission stays out of the
+   * queue strip without a plugin-side dock clone.
+   */
+  visibleRow?: (row: InboxState['next-turn'][number]) => boolean
+}
+
+/**
+ * Optional session-scoped queue-dock visibility policy, provided on the
+ * Session's scope by at most one plugin. The dock consults it for every
+ * durable row before render; the local pending-submission echoes never pass
+ * through it. A policy that hides real user rows breaks the queue contract —
+ * scope it to the Session it owns.
+ */
+export interface ConversationQueueVisibility {
+  /** Whether one durable queued row shows in the Session's queue dock. */
+  visible(row: InboxState['next-turn'][number]): boolean
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Optional per-Session queue-dock row visibility policy. */
+    conversationQueueVisibility?: ConversationQueueVisibility
+  }
 }
 
 /**
@@ -102,16 +129,18 @@ export type QueueDockProps = PropsRuntime<'conversation.input.dock'> & QueueDock
  * collapsible count header; an empty queue renders nothing. Local queued submissions
  * show sending status and disabled actions until their Host queue rows arrive.
  */
-export function QueueDock({ useSession, useProjection, updateQueue, notify, loadImage, renderFactorySlot, t }: QueueDockProps) {
+export function QueueDock({ useSession, useProjection, updateQueue, notify, loadImage, visibleRow, renderFactorySlot, t }: QueueDockProps) {
   const inbox = useProjection('inbox') as unknown as InboxState | undefined
   const pendingSubmissions = useSession(s => s.pendingSubmissions)
   const queue = useMemo(() => {
-    const rows = inbox?.['next-turn'] ?? EMPTY_QUEUE
+    const admitted = visibleRow === undefined
+      ? inbox?.['next-turn'] ?? EMPTY_QUEUE
+      : (inbox?.['next-turn'] ?? EMPTY_QUEUE).filter(row => visibleRow(row))
     const inChat = new Set(pendingSubmissions.filter(item => item.placement === 'transcript').map(item => item.requestId))
-    return inChat.size === 0 ? rows : rows.filter(({ source }) => (
+    return inChat.size === 0 ? admitted : admitted.filter(({ source }) => (
       source.kind !== 'user' || !('rpcId' in source) || !inChat.has(source.rpcId)
     ))
-  }, [inbox, pendingSubmissions])
+  }, [inbox, pendingSubmissions, visibleRow])
   const pendingQueue = useMemo(() => {
     const admitted = new Set(queue.flatMap(({ source }) => (
       source.kind === 'user' && 'rpcId' in source ? [source.rpcId] : []
@@ -404,10 +433,12 @@ export const queueDockEntry = {
         if (actx === undefined) throw new Error(`queue dock: session "${sessionId}" resolved no scope`)
         const conversation = actx.get('conversation')
         if (conversation === undefined) throw new Error('queue dock: conversation service unavailable')
+        const visibility = actx.get('conversationQueueVisibility')
         return {
           updateQueue: (itemId, action) => conversation.updateQueue(itemId, action),
           notify: (level, text) => { conversation.input.for(actx).notify(level, text) },
           loadImage: attachment => ctx.uiConversation.imageUrl(sessionId, attachment),
+          ...(visibility === undefined ? {} : { visibleRow: row => visibility.visible(row) }),
         }
       },
     }, QueueDock))

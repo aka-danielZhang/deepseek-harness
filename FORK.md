@@ -4,7 +4,7 @@
 
 ## Fork 的存在目的
 
-处理上游没有 slot、也没有其他扩展点可以覆盖的场景。判断顺序：优先用动态 Cordis 插件或既有 slot 解决；确认没有任何扩展点可用时，才修改仓库代码。在册先例：`mcp-client/status` 事件（`packages/mcp/mcp-client`）。已退役先例：`settings.models.provider` 行级插槽曾为此目的引入，后因 dsh-provider-balance 插件改用纯 DOM 注入路径（宿主零改动）而于 ffffaf39 revert —— 插件侧 DOM 注入能覆盖行级 UI 需求时，优先插件侧，不给 fork 添源码负担。
+处理上游没有 slot、也没有其他扩展点可以覆盖的场景。判断顺序：优先用动态 Cordis 插件或既有 slot 解决；确认没有任何扩展点可用时，才修改仓库代码。在册先例：`conversation.session.header` chain 化与 `conversationQueueVisibility` 会话级服务、`session/setInteractionMode` 提交门（Quno worker 只读面）；`sidebar.header.action` 席位与 `conversationAgentPreset` 行归属；llm-pi-ai 会话亲和头与 opencode-go 默认路由；agent-default-model 路由级 effort 记忆；frontend-static 显式 content-length（WKWebView 停滞）；`web:log` 子命令。已退役先例：`mcp-client/status` 事件（上游 0.2.2 以官方 `McpStatusCell`/`connectionStatusOf` 收编，fork 补丁随 0.2.2-rc.3 合并退役）；`settings.models.provider` 行级插槽（dsh-provider-balance 改纯 DOM 注入后于 ffffaf39 revert）。
 
 ## 修改三原则
 

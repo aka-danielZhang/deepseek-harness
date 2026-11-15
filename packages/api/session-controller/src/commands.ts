@@ -44,12 +44,15 @@ import type {
   SessionCreateValue,
   SessionForkRequest,
   SessionForkValue,
+  SessionInteractionMode,
   SessionPromptRequest,
   SessionPromptValue,
   SessionRenameRequest,
   SessionRenameValue,
   SessionSelectModelRequest,
   SessionSelectModelValue,
+  SessionSetInteractionModeRequest,
+  SessionSetInteractionModeValue,
   SessionUpdateQueueRequest,
   SessionUpdateQueueValue,
   SessionRequestId,
@@ -92,6 +95,13 @@ export class SessionCommandController {
     messages: Set<MessageId>
     requests: Set<SessionRequestId>
   }>()
+
+  /**
+   * Client-declared viewing posture per exact Session, volatile by design: the
+   * declaration describes the current browser view, not durable Session state,
+   * so a Host restart drops it and every Session starts interactive again.
+   */
+  private readonly interactionModes = new WeakMap<Session, SessionInteractionMode>()
 
   private continuation!: ProjectionHandle<ContinuationState>
 
@@ -236,6 +246,17 @@ export class SessionCommandController {
   }
 
   /**
+   * Record how the client is currently viewing one Session.
+   * @param request - Session identity and declared viewing posture.
+   * @returns the mode now in force for the Session.
+   */
+  async setInteractionMode(request: SessionSetInteractionModeRequest): Promise<SessionSetInteractionModeValue> {
+    const agent = await this.resolveAgent(request.sessionId)
+    this.interactionModes.set(agent.session, request.mode)
+    return { sessionId: request.sessionId, mode: request.mode }
+  }
+
+  /**
    * Normalize and append a user-owned Session title.
    * @param request - Session identity and proposed title.
    * @returns the accepted title and durable event sequence.
@@ -361,6 +382,17 @@ export class SessionCommandController {
    */
   async prompt(request: SessionPromptRequest, source: MessageSource): Promise<SessionPromptValue> {
     const agent = await this.resolveAgent(request.sessionId)
+    // The inspect gate runs before any admission work: a user prompt aimed at
+    // a Session the client declared read-only is refused here, before the
+    // durable log, the queue, or the Agent see it. Program-side inputs do not
+    // travel this path and stay unaffected.
+    if (this.interactionModes.get(agent.session) === 'inspect') {
+      throw new RemoteError(
+        'session/read-only',
+        `session "${request.sessionId}" is being viewed read-only; switch back to the interactive view to send messages`,
+        { sessionId: request.sessionId },
+      )
+    }
     if (this.hasPromptRequest(agent.session, request.requestId)) return { accepted: true }
     if (request.content.length === 0) {
       try {

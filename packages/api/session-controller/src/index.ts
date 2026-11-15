@@ -60,6 +60,8 @@ import type {
   SessionSearchValue,
   SessionSelectModelRequest,
   SessionSelectModelValue,
+  SessionSetInteractionModeRequest,
+  SessionSetInteractionModeValue,
   SessionProjectionsRequest,
   SessionProjectionsValue,
   SessionUpdateQueueRequest,
@@ -436,6 +438,19 @@ export class SessionController extends TypertRemoteService {
   @Remote('rename')
   rename(request: SessionRenameRequest): Promise<SessionRenameValue> {
     return this.commands.rename(request)
+  }
+
+  /**
+   * Declare how the client is currently viewing one Session. An `inspect`
+   * declaration makes the Host refuse user prompt admission for the Session
+   * until an `interactive` declaration replaces it; the state is volatile and
+   * dies with the Host process.
+   * @param request - Session identity and declared viewing posture.
+   * @returns the mode now in force for the Session.
+   */
+  @Remote('setInteractionMode')
+  setInteractionMode(request: SessionSetInteractionModeRequest): Promise<SessionSetInteractionModeValue> {
+    return this.commands.setInteractionMode(request)
   }
 
   /**
