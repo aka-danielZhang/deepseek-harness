@@ -89,32 +89,6 @@ kind: "package-reference"
 
 当前模型接受图片输入且 harness 启用了附件功能时支持图片；图片会像其他图片一样出现在对话中。不支持图片时——以及服务器返回音频或嵌入资源时——模型会看到清晰的诊断消息，而不是什么都没有。
 
-## 事件
-
-| 事件 | 模式 | 载荷 |
-|---|---|---|
-| `mcp-client/status` | emit | `serverName`、`status: 'connecting' \| 'connected' \| 'reconnecting' \| 'failed' \| 'disposed'`、`toolCount` |
-
-在每个监督器提交点发布：尝试开始（`connecting`）、连接与初始同步完成（`connected`）、退避已武装（`reconnecting`）、放弃／禁用重连后的丢失／从未关闭的失败世代（`failed`），以及处置（`disposed`）。完成的工具同步也会重发当前状态，因为 `toolCount` 会在状态不变时变化——包括排队的注销跑完后第二次带 `toolCount: 0` 的 `failed`／`disposed`。发出该事件的 fiber 上下文及其每个祖先都通过共享 Cordis 事件总线观察它；`serverName` 用来区分并发实例。监听器失败由发射方收容并记日志，因此观察者缺陷不会打断监督器。仅靠 fiber 生命周期无法代替此事件：在 `failOnStartupError: false` 时，失败的服务器仍会在重连循环里到达 `active` fiber。
-
-### 启动、工具更新与重连
-
-服务器的工具会在 harness 开始首个轮次之前出现。设置 `startupTimeoutMs` 可约束每次连接尝试，包括模板解析与初次工具发现；省略时不添加覆盖整次尝试的截止时间。工具列表通知会刷新已注册工具；发现失败保留上一组工具，注册冲突则关闭连接并按重连策略处理。
-
-服务器连接断开时——例如本地服务器进程崩溃——插件会以从 500 ms 起逐次翻倍、上限 30 s 的延迟自动重连，并刷新工具集；重连进度在日志中可见。中断期间最后已知的工具仍会列出，但对它们的调用会失败，直到服务器恢复。连续失败十次后，该服务器的工具会被移除，重连停止，直到你重载配置或重启 harness；服务器持续连接一段时间后，该计数会重置。设置 `reconnect.enabled: false` 可禁用自动重连——此时工具在断开后仍会列出，但调用失败，直到你重载。编辑配置项会在原地重载服务器连接，未变的名称保持不变。
-
-<a id="runtime-templates-and-credentials"></a>
-### 运行时模板与凭据
-
-启用 `expandTemplates: true` 后，`command`、`args`、`env` 值、`cwd`、`url` 与 `headers` 值接受 `${credential:REF}`。当前凭据提供方解析每个引用；[本地提供方](../../credentials/credentials-local/README.zh.md)还会读取宿主继承的环境变量。原始插件配置保留模板字符串。使用凭据引用时，加载阶段必须存在凭据提供方。缺失值会进入 `waiting-credentials`，不消耗重连次数，严格启动拒绝激活的情况除外；被引用凭据更新时会重试解析。
-
-凭据通知只有在解析值变化时才重建连接；值相同的通知保留连接及其重连预算。替代连接启动前，旧连接必须关闭并完成本地清理。清理未完成会阻止替换，直到宿主重启。
-
-启用模板展开时，失败诊断、工具调用失败与 MCP `isError` 工具结果文本保留上游消息，但会把本实例解析过的每个值（包括此前轮换的值及其 URL 编码形式）替换为 `[redacted]`。成功工具结果保留原始内容。
-
------
-
-<a id="understand-the-implementation"></a>
 ## 理解实现
 
 <details>
