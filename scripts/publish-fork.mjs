@@ -165,6 +165,13 @@ export function rewriteManifest(pkgJson, name, version, versionOf, stagingPath, 
     }
   }
   manifest.publishConfig = { ...manifest.publishConfig, access: 'public' }
+  // The docs-staging hooks resolve repo-root scripts that staging lacks; the
+  // docs were staged into the copied tree before the copy (see the prepack run
+  // above), so packing without the hooks still ships them.
+  if (manifest.scripts?.prepack?.includes('stage-dsh-docs')) {
+    delete manifest.scripts.prepack
+    delete manifest.scripts.postpack
+  }
   mkdirSync(dirname(stagingPath), { recursive: true })
   writeFileSync(stagingPath, JSON.stringify(manifest, null, 2) + '\n')
   return renamed
@@ -242,6 +249,13 @@ async function main() {
   const staging = resolve(repoRoot, '.publish-staging')
   rmSync(staging, { recursive: true, force: true })
   mkdirSync(staging, { recursive: true })
+  // Upstream's dsh CLI prepack stages the repository docs into apps/cli/docs
+  // (gitignored build output). Run it once in the REAL tree so the staged copy
+  // ships docs, then strip the hooks from the staging manifest — the repo-root
+  // script tree they resolve against does not exist under staging.
+  if (selected.includes('@deepseek-ai/dsh')) {
+    run('pnpm', ['run', 'prepack'], { cwd: resolve(repoRoot, 'apps/cli') })
+  }
 
   const renamedOf = new Map()
   for (const name of selected) {
