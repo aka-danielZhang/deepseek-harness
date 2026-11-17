@@ -51,6 +51,14 @@ export interface SessionViewOptions {
 /** Workspace archive, directory, and browsing-view operations consumed by Client UI domains. */
 export interface UiWorkspace {
   /**
+   * Capability marker: the flat list's complete sort account ignores
+   * contributor predicates, so a registered filter only ever hides rows and
+   * never drops a saved position. Runtimes without this marker apply
+   * contributor predicates to flat-list membership and must not host a
+   * filter that hides ordinary rows.
+   */
+  readonly sessionVisibilityPreservesFlatOrder: true
+  /**
    * Register a contributor-owned Session visibility predicate.
    * @param filter - false hides the Session from grouped, flat, and search views.
    * @returns an idempotent disposer that removes only this registration.
@@ -199,6 +207,8 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   readonly sessionVisibilityRevision = this.visibility.revision
   /** Evaluate the currently registered predicates for one Session summary. */
   readonly acceptSession = this.visibility.accept
+  /** Capability marker for consumers that hide rows (see {@link UiWorkspace}). */
+  readonly sessionVisibilityPreservesFlatOrder = true
   private mainReference: SessionReference | undefined
   private restorationNavigation: AbortSignal | undefined
 

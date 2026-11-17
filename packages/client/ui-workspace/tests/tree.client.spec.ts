@@ -243,6 +243,40 @@ describe('Session ordering', () => {
     expect(members).toEqual(['plain', 'archived'])
   })
 
+  it('keeps contributed visibility out of complete flat membership', () => {
+    const sessions = list(summary('visible', 2), summary('hidden', 1))
+    const accept = (session: SessionSummary): boolean => session.id !== sid('hidden')
+    const members = sessionMemberIds(sessions)
+    expect(members).toEqual(['visible', 'hidden'])
+    expect(deriveFlat(sessions, members, noRows, noAttention, accept).map(row => row.id))
+      .toEqual(['visible'])
+    expect(members).toEqual(['visible', 'hidden'])
+  })
+
+  it('keeps native blank and subagent rules in complete flat membership', () => {
+    const sessions = withMain(list(
+      { ...summary('blank-current', 4), blank: true },
+      { ...summary('blank-other', 3), blank: true },
+      { ...summary('child', 2), origin: 'subagent' },
+      summary('ordinary', 1),
+    ), sid('blank-current'))
+    expect(sessionMemberIds(sessions)).toEqual(['blank-current', 'ordinary'])
+    expect(deriveFlat(sessions, sessionMemberIds(sessions), noRows, noAttention).map(row => row.id))
+      .toEqual(['blank-current', 'ordinary'])
+  })
+
+  it('keeps archives and contributed hidden rows in one complete flat account', () => {
+    const sessions = list(summary('plain', 4), summary('hidden', 3), summary('archived', 2))
+    const accept = (session: SessionSummary): boolean => session.id !== sid('hidden')
+    const members = sessionMemberIds(sessions)
+    expect(members).toEqual(['plain', 'hidden', 'archived'])
+    const state = rowState({ archived: ['archived'] })
+    expect(deriveFlat(sessions, members, state, noAttention, accept).map(row => row.id))
+      .toEqual(['plain'])
+    expect(deriveFlat(sessions, members, state, noAttention).map(row => row.id))
+      .toEqual(['plain', 'hidden'])
+  })
+
   it('pins only the selected blank without changing the base order', () => {
     expect(pinCurrentBlank([sid('newer'), sid('blank'), sid('older')], sid('blank')))
       .toEqual([sid('blank'), sid('newer'), sid('older')])

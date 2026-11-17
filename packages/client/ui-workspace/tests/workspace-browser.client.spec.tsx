@@ -565,6 +565,63 @@ describe('WorkspaceBrowser', () => {
     expect(screen.queryByText('child-session')).toBeNull()
   })
 
+  it('keeps contributed hidden rows in the complete flat account across a drag', () => {
+    const visibility = createSnapshotStore(0)
+    let hideMiddle = true
+    const acceptSession = (session: SessionSummary): boolean => !hideMiddle || session.id !== sid('middle')
+    const b = mount({
+      useSessions: hook(sessionState([summary('first', 30), summary('middle', 20), summary('last', 10)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['first', 'middle', 'last'])])),
+      acceptSession,
+      useSessionVisibility: bindSnapshotSelector(visibility),
+    })
+    fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '单列表' }))
+    expect(screen.queryByText('middle')).toBeNull()
+
+    const last = screen.getByText('last').closest('[role="treeitem"]') as HTMLElement
+    const first = screen.getByText('first').closest('[role="treeitem"]') as HTMLElement
+    first.getBoundingClientRect = () => ({
+      top: 100, bottom: 134, left: 0, right: 200, width: 200, height: 34, x: 0, y: 100, toJSON: () => ({}),
+    })
+    fireEvent.dragStart(last, { dataTransfer: dragData() })
+    fireDrag(first, 'drop', 102)
+
+    const saved = b.store.getSnapshot().sessionOrderByAccount[FLAT_SESSION_ORDER_KEY]!
+    // Membership is complete: the hidden row survives once, and the visible rows keep their new relative order.
+    expect([...saved].sort()).toEqual(['first', 'last', 'middle'])
+    expect(saved.filter(id => id !== 'middle')).toEqual(['last', 'first'])
+
+    hideMiddle = false
+    act(() => { visibility.set(1) })
+    expect(screen.getAllByRole('treeitem').map(row => row.textContent))
+      .toEqual(saved.map(id => expect.stringContaining(id)))
+  })
+
+  it('writes the complete flat account when the drag starts from Last updated', () => {
+    const b = mount({
+      useSessions: hook(sessionState([summary('first', 30), summary('middle', 20), summary('last', 10)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['first', 'middle', 'last'])])),
+      acceptSession: (session: SessionSummary) => session.id !== sid('middle'),
+      useSessionVisibility: hook(1),
+    })
+    fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '单列表' }))
+    fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '最近更新' }))
+    expect(b.store.getSnapshot().sessionOrderByAccount).toEqual({})
+
+    const last = screen.getByText('last').closest('[role="treeitem"]') as HTMLElement
+    const first = screen.getByText('first').closest('[role="treeitem"]') as HTMLElement
+    first.getBoundingClientRect = () => ({
+      top: 100, bottom: 134, left: 0, right: 200, width: 200, height: 34, x: 0, y: 100, toJSON: () => ({}),
+    })
+    fireEvent.dragStart(last, { dataTransfer: dragData() })
+    fireDrag(first, 'drop', 102)
+    expect(b.store.getSnapshot().orderBy).toBe('manual')
+    expect(b.store.getSnapshot().sessionOrderByAccount[FLAT_SESSION_ORDER_KEY]).toContain('middle')
+  })
+
   it('renders the grouped tree by default and switches to the flat list via Group by', () => {
     const sessions = sessionState([summary('alpha-s', 2), summary('beta-s', 1)])
     const b = mount({
