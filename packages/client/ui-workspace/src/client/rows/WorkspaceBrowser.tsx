@@ -942,7 +942,6 @@ export function WorkspaceBrowser({
   const shortcutState = useWorkspaceShortcuts(state => state)
   // Ordering remains live while the rail or search replaces the list body.
   const list = useSessions(state => state)
-  const visibilityRevision = useSessionVisibility(value => value)
   const storedWorkspaces = useWorkspaces(state => state.items)
   // The resolved name, not `t`, is the memo dependency: the bound seat keeps
   // its identity across a language switch.
@@ -996,10 +995,9 @@ export function WorkspaceBrowser({
     () => ({ ...orderState, archivedFilter }),
     [orderState, archivedFilter],
   )
-  const flatMemberIds = useMemo(
-    () => sessionMemberIds(list, acceptSession),
-    [list, acceptSession, visibilityRevision],
-  )
+  // Flat account membership is sort bookkeeping: contributor visibility filters
+  // rows at render time only, so a hidden member never loses its saved position.
+  const flatMemberIds = useMemo(() => sessionMemberIds(list), [list])
   const orderedWorkspaces = useMemo(() => workspaces.map((workspace) => {
     const memberIds = workspace.sessionIds
     const baseOrder = orderBy === 'updated'

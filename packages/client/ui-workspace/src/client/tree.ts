@@ -466,12 +466,17 @@ export function deriveGroups(
 
 /**
  * Select complete flat-list membership, independently of archive visibility.
+ *
+ * This is the flat account's sort bookkeeping, so it never consults contributor
+ * predicates registered through `uiWorkspace.registerSessionVisibilityFilter`:
+ * a row another plugin hides keeps its saved position, and contributor
+ * visibility is applied only where {@link deriveFlat} renders rows. Archive
+ * visibility follows the same split — membership here, filtering there.
  * @param list - sessions list snapshot.
- * @param acceptSession - contributor predicate applied before row membership.
  * @returns known ordinary Session ids, including archives and only the current blank.
  */
-export function sessionMemberIds(list: SessionListState, acceptSession?: (session: SessionSummary) => boolean): SessionId[] {
-  return visibleSessionIds(list, [], 'show', acceptSession)
+export function sessionMemberIds(list: SessionListState): SessionId[] {
+  return visibleSessionIds(list, [], 'show')
 }
 
 /**
